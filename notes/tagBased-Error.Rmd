@@ -2,7 +2,7 @@
 title: "Tag-based Error correction"
 author: "Dougals Wu"
 date: "December 1, 2015"
-output: pdf_document
+output: html_document
 ---
 
 This is a note for myself on the tag-based error correction program that I coded up. 
