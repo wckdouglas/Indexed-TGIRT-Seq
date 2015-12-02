@@ -3,7 +3,6 @@
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from sys import stderr
 import sys
-from shove import Shove
 from multiprocessing import Pool, Manager, Process
 import argparse
 import numpy as np
