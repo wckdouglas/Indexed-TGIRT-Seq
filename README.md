@@ -1,6 +1,6 @@
 # Indexed-TGIRT-Seq
 
-This folder contain scripts for tag-based error correction of TGIRT-seq developed by [Douglas Wu](wckdouglas@gmail.com).
+This folder contain scripts for tag-based error correction of TGIRT-seq developed by [Douglas Wu](mailto:wckdouglas@gmail.com).
 
 Scripts:
 
