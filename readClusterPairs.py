@@ -111,7 +111,7 @@ def likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold):
     sortedLogLik = np.sort(logLikelihood)[::-1]
     maxLogLik = sortedLogLik[0]
     nullLogLik = logsumexp(sortedLogLik[1:])
-    loglikRatio = maxLogLik - nullLogLik \
+    loglikRatio = np.true_divide(maxLogLik - nullLogLik, np.sum(baseCount)) \
                     if nullLogLik > 0 \
                     else loglikThreshold + 1
     concensusBase = regBase[logLikelihood == maxLogLik][0] \
