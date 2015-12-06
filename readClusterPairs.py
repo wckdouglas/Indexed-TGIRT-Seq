@@ -112,12 +112,12 @@ def likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold):
     maxLogLik = sortedLogLik[0]
     nullLogLik = logsumexp(sortedLogLik[1:])
     loglikRatio = maxLogLik - nullLogLik \
-                    if otherLikelihood > 0 \
+                    if nullLogLik > 0 \
                     else loglikThreshold + 1
-    concensusBase = regBase[likelihood == maxLikelihood][0] \
+    concensusBase = regBase[logLikelihood == maxLogLik][0] \
                     if loglikRatio > loglikThreshold \
                     else 'N'
-    print loglikRatio,'   ',np.sum(baseCount),'   ',countDict[concensusBase] if concensusBase in regBase else 0
+    #print loglikRatio,'   ',np.sum(baseCount),'   ',countDict[concensusBase] if concensusBase in regBase else 0
     return concensusBase
 
 def calculateConcensusBase(arg):
