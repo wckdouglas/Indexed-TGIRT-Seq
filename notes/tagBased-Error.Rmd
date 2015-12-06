@@ -41,12 +41,12 @@ P(jA, kC, lT, mG|base=A) = (1-0.01)^{j} \times 0.01^{k} \times 0.01^{l} \times 0
 Likelihood is calculated for all four base 
 
 \[
-\theta \in \{L(base=A|jA,kC,lT,mG),L(base=T|jA,kC,lT,mG),L(base=C|jA,kC,lT,mG),L(base=G|jA,kC,lT,mG)\}
+\hat{\theta} \in \{L(base=A|jA,kC,lT,mG),L(base=T|jA,kC,lT,mG),L(base=C|jA,kC,lT,mG),L(base=G|jA,kC,lT,mG)\}
 \]
 
 likelihood ratio test was performed by:
 \[
-log(\Lambda) = log(\frac{max(\theta)}{\sum \theta - max(\theta)})
+log(\Lambda) = log(\frac{max(\hat{\theta})}{\sum \hat{\theta} - max(\hat{\theta)}})
 \]
 
 If the $log(\Lambda)$ is greater than some threshold, the concensus base is determined to be the base that has maximum likelihood.
@@ -55,13 +55,41 @@ If the $log(\Lambda)$ is greater than some threshold, the concensus base is dete
 
 # log likelihood ratio threshold
 
-To choose the optimal cut off for likelihood ratio, the data was subsampled to 250000 reads and distribution of $log(\Lambda)$ was plotted.
+To choose the optimal cut off for likelihood ratio, 10000 positions were simulated having coverages from 4-80 reads, and errors are introduced by possion model with the sequencing error $(\lambda = 0.01)$. $log(\Lambda)$ was calculated from each points and plotted as below with respect to coverage:
 
-```{r warning=FALSE,message=FALSE, echo=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(dplyr)
 library(cowplot)
-library(readr)
-loglik = read_tsv('try1.dat',col_names=F)
-qplot(data=loglik,x=X1,geom='bar')
+
+seqErr <- 0.03
+cov <- sample(4:80,10000,replace=T)
+df <- data_frame(cov) %>%
+#	mutate(mismatch = sapply(cov,function(a) rbinom(1,a,seqErr))) %>%
+	mutate(mismatch = rpois(cov,0.01)) %>%
+	mutate(match = cov - mismatch) %>%
+	mutate(correctLikelihood = 0.99 ^ match * 0.01 ^ mismatch) %>%
+	mutate(incorrectLikelihood = 0.99 ^ mismatch * 0.01 ^ match) %>%
+	mutate(likelihoodRatio = correctLikelihood/incorrectLikelihood) %>%
+	mutate(loglikelihoodRatio = log(correctLikelihood)-log(incorrectLikelihood)) %>%
+	mutate(loglikelihoodRatio = ifelse(loglikelihoodRatio<0,0,loglikelihoodRatio)) %>%
+    mutate(newParam = loglikelihoodRatio/cov) %>%
+	tbl_df
+
+p3 <- ggplot(data=df,aes(y=loglikelihoodRatio,x=cov)) +
+	geom_smooth(method='lm') +
+	geom_point() 
+
+p3
 ```
 
-Since the distribution is almost a bimodal distribution, a threshold of 100 was chosen.
+\newpage
+It can be seen that loglikeliihoodRatio is porportion to coverage, so a threshold must be chosen with respect to coverage. Plotting a histogram of $\frac{loglikelihoodRatio}{coverage}$, a threshold was chosen around 4.55.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+p4 <- ggplot(data=df,aes(x=newParam)) +
+	geom_bar(binwidth=0.01) +
+    scale_y_log10()+
+	scale_x_continuous(breaks=seq(0,5,0.1)) +
+	theme(axis.text.x = element_text(angle=90,hjust=1,vjust=0.5))
+p4
+```
