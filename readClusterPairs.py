@@ -1,6 +1,7 @@
 #!/bin/env python
 
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
+from scipy.misc import logsumexp
 from sys import stderr
 import sys
 from multiprocessing import Pool, Manager, Process
@@ -84,12 +85,12 @@ def getLikelihood(countDict, seqErr, base):
     Using sequencing error rate as conditional probability: e.g. P(A|base=C) = 0.01
     calculate the likelihood of the given base is the concensus base
     """
-    probabilities = np.array([np.power((1-seqErr),countDict[basekey]) \
+    logProbabilities = np.array([countDict[basekey] * np.log(1-seqErr) \
                                 if basekey == base \
-                                else np.power(seqErr,countDict[basekey]) \
+                                else countDict[basekey] * np.log(seqErr) \
                                 for basekey in countDict.keys()],dtype='float64')
-    likelihood = np.prod(probabilities)
-    return likelihood
+    logLikelihood = np.sum(logProbabilities)
+    return logLikelihood
 
 def likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold):
     """
@@ -105,17 +106,18 @@ def likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold):
         countDict[base] = baseCount[uniqueBases==base][0] \
                             if base in uniqueBases \
                             else 0 
-    likelihood = np.array([getLikelihood(countDict, seqErr, base) \
+    logLikelihood = np.array([getLikelihood(countDict, seqErr, base) \
                             for base in regBase],dtype='float64')
-    sortedLikihood = np.sort(likelihood)[::-1]
-    maxLikelihood = sortedLikihood[0]
-    otherLikelihood = np.sum(sortedLikihood[1:])
-    loglikRatio = np.log(np.divide(maxLikelihood,otherLikelihood))\
-                    if otherLikelihood != 0 \
+    sortedLogLik = np.sort(logLikelihood)[::-1]
+    maxLogLik = sortedLogLik[0]
+    nullLogLik = logsumexp(sortedLogLik[1:])
+    loglikRatio = maxLogLik - nullLogLik \
+                    if otherLikelihood > 0 \
                     else loglikThreshold + 1
     concensusBase = regBase[likelihood == maxLikelihood][0] \
                     if loglikRatio > loglikThreshold \
                     else 'N'
+    print loglikRatio,'   ',np.sum(baseCount),'   ',countDict[concensusBase] if concensusBase in regBase else 0
     return concensusBase
 
 def calculateConcensusBase(arg):

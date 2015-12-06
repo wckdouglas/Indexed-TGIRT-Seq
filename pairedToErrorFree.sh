@@ -14,10 +14,9 @@ do
             --idxBase=13 \
             --vote=0.9 \
             --barcodeCutOff=33 \
-            --loglikThreshold=100 \
-            --seqError=0.01 \
+            --loglikThreshold=4.5 \
+            --seqError=0.02 \
             --outputprefix=$resultpath/$samplename-ErrorFree \
             --fastq1=$fq1 --fastq2=$fq2 --retainN
-done
-
+done | grep -v 'try\|ErrorFree.Error'
 
