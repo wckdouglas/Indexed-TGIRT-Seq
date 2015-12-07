@@ -32,21 +32,32 @@ L(base = A|jA, kC, lT, mG) = P(jA, kC, lT, mG|base=A) = \prod_{b_i \in (\text{al
 P(jA, kC, lT, mG|base=A) = P(A|base=A)^{j} \times P(C|base=A)^{k} \times P(T|base=A)^{l} \times P(G|base=A)^{m}
 \]
 
+Taking log would be computationally easier.
+
+\[
+log(L(base=A|jA, kC, lT, mG)) = log(P(jA, kC, lT, mG|base=A)) = \sum_{b\in{A,C,T,G}} (\text{# of b}) \times log(P(b|base=A))
+\]
+
 And sequencing error was estimated at 0.01.
 
 \[
-P(jA, kC, lT, mG|base=A) = (1-0.01)^{j} \times 0.01^{k} \times 0.01^{l} \times 0.01^{m}
+Log(L(base=A|jA, kC, lT, mG)) = j \times log(1-0.01) + (k+l+m)\times log(0.01)
 \]
 
-Likelihood is calculated for all four base 
+Log likelihood is calculated for all four base 
 
 \[
-\hat{\theta} \in \{L(base=A|jA,kC,lT,mG),L(base=T|jA,kC,lT,mG),L(base=C|jA,kC,lT,mG),L(base=G|jA,kC,lT,mG)\}
+log(\hat{\theta}) \in \{log(L(base=A|jA,kC,lT,mG)),log(L(base=T|jA,kC,lT,mG)),log(L(base=C|jA,kC,lT,mG)),log(L(base=G|jA,kC,lT,mG))\}
 \]
+
+let:
+
+* $\theta_{max}$ be $max(\log(\hat{\theta}))$     
+* $\hat{\theta}_{null}$ be $\hat{\theta}$ without $\theta_{max}$
 
 likelihood ratio test was performed by:
 \[
-log(\Lambda) = log(\frac{max(\hat{\theta})}{\sum \hat{\theta} - max(\hat{\theta)}})
+log(\Lambda) = log(max(\hat{\theta})) - logsumexp(\hat{\theta}_{null})
 \]
 
 If the $log(\Lambda)$ is greater than some threshold, the concensus base is determined to be the base that has maximum likelihood.

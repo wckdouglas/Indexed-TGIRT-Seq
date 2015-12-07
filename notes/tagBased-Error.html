@@ -86,16 +86,26 @@ L(base = A|jA, kC, lT, mG) = P(jA, kC, lT, mG|base=A) = \prod_{b_i \in (\text{al
 <p><span class="math display">\[
 P(jA, kC, lT, mG|base=A) = P(A|base=A)^{j} \times P(C|base=A)^{k} \times P(T|base=A)^{l} \times P(G|base=A)^{m}
 \]</span></p>
+<p>Taking log would be computationally easier.</p>
+<p><span class="math display">\[
+log(L(base=A|jA, kC, lT, mG)) = log(P(jA, kC, lT, mG|base=A)) = \sum_{b\in{A,C,T,G}} (\text{# of b}) \times log(P(b|base=A))
+\]</span></p>
 <p>And sequencing error was estimated at 0.01.</p>
 <p><span class="math display">\[
-P(jA, kC, lT, mG|base=A) = (1-0.01)^{j} \times 0.01^{k} \times 0.01^{l} \times 0.01^{m}
+Log(L(base=A|jA, kC, lT, mG)) = j \times log(1-0.01) + (k+l+m)\times log(0.01)
 \]</span></p>
-<p>Likelihood is calculated for all four base</p>
+<p>Log likelihood is calculated for all four base</p>
 <p><span class="math display">\[
-\hat{\theta} \in \{L(base=A|jA,kC,lT,mG),L(base=T|jA,kC,lT,mG),L(base=C|jA,kC,lT,mG),L(base=G|jA,kC,lT,mG)\}
+log(\hat{\theta}) \in \{log(L(base=A|jA,kC,lT,mG)),log(L(base=T|jA,kC,lT,mG)),log(L(base=C|jA,kC,lT,mG)),log(L(base=G|jA,kC,lT,mG))\}
 \]</span></p>
+<p>let:</p>
+<ul>
+<li><span class="math inline">\(\theta_{max}\)</span> be <span class="math inline">\(max(\log(\hat{\theta}))\)</span><br />
+</li>
+<li><span class="math inline">\(\hat{\theta}_{null}\)</span> be <span class="math inline">\(\hat{\theta}\)</span> without <span class="math inline">\(\theta_{max}\)</span></li>
+</ul>
 <p>likelihood ratio test was performed by: <span class="math display">\[
-log(\Lambda) = log(\frac{max(\hat{\theta})}{\sum \hat{\theta} - max(\hat{\theta)}})
+log(\Lambda) = log(max(\hat{\theta})) - logsumexp(\hat{\theta}_{null})
 \]</span></p>
 <p>If the <span class="math inline">\(log(\Lambda)\)</span> is greater than some threshold, the concensus base is determined to be the base that has maximum likelihood.</p>
 </div>
