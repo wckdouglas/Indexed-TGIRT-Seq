@@ -80,6 +80,6 @@ p <- ggplot(data=df, aes(y= loglik, x=ratio)) +
         geom_vline(x=0.95, color='green') +
         scale_size_continuous(breaks=seq(0,300,50))+
         scale_color_gradient(high='red',low='yellow') +
-        labs(x='Correct base ratio',y = 'Log likelihood ratio', color='Base coverage', size = '# of events')
+        labs(x='Correct base ratio',y = 'Normalized log likelihood ratio', color='Base coverage', size = '# of events')
 p
 ```
