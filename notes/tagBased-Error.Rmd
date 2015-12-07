@@ -55,41 +55,27 @@ If the $log(\Lambda)$ is greater than some threshold, the concensus base is dete
 
 # log likelihood ratio threshold
 
-To choose the optimal cut off for likelihood ratio, 10000 positions were simulated having coverages from 4-80 reads, and errors are introduced by possion model with the sequencing error $(\lambda = 0.01)$. $log(\Lambda)$ was calculated from each points and plotted as below with respect to coverage:
+```{r echo=False, message=False, warnings=False}
+#!/bin/env Rscript
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(readr)
 library(dplyr)
 library(cowplot)
 
-seqErr <- 0.03
-cov <- sample(4:80,10000,replace=T)
-df <- data_frame(cov) %>%
-#	mutate(mismatch = sapply(cov,function(a) rbinom(1,a,seqErr))) %>%
-	mutate(mismatch = rpois(cov,0.01)) %>%
-	mutate(match = cov - mismatch) %>%
-	mutate(correctLikelihood = 0.99 ^ match * 0.01 ^ mismatch) %>%
-	mutate(incorrectLikelihood = 0.99 ^ mismatch * 0.01 ^ match) %>%
-	mutate(likelihoodRatio = correctLikelihood/incorrectLikelihood) %>%
-	mutate(loglikelihoodRatio = log(correctLikelihood)-log(incorrectLikelihood)) %>%
-	mutate(loglikelihoodRatio = ifelse(loglikelihoodRatio<0,0,loglikelihoodRatio)) %>%
-    mutate(newParam = loglikelihoodRatio/cov) %>%
-	tbl_df
-
-p3 <- ggplot(data=df,aes(y=loglikelihoodRatio,x=cov)) +
-	geom_smooth(method='lm') +
-	geom_point() 
-
-p3
-```
-
-\newpage
-It can be seen that loglikeliihoodRatio is porportion to coverage, so a threshold must be chosen with respect to coverage. Plotting a histogram of $\frac{loglikelihoodRatio}{coverage}$, a threshold was chosen around 4.55.
-
-```{r echo=FALSE, message=FALSE, warning=FALSE}
-p4 <- ggplot(data=df,aes(x=newParam)) +
-	geom_bar(binwidth=0.01) +
-    scale_y_log10()+
-	scale_x_continuous(breaks=seq(0,5,0.1)) +
-	theme(axis.text.x = element_text(angle=90,hjust=1,vjust=0.5))
-p4
+p <- read_csv('threshold.dat',col_names=c('loglik','cov','match'),col_type='nnn') %>%
+    filter(match!=0) %>%
+    mutate(ratio = match/cov) %>%
+    filter(loglik < 10) %>%
+    group_by(loglik, ratio,cov, match) %>%
+    summarize(count = n()) %>%
+    ggplot(aes(y= loglik, x=ratio)) +
+        geom_point(alpha=0.7,aes(color=cov,size=count)) +
+        scale_x_continuous(breaks=seq(0,1,0.05)) +
+        scale_y_continuous(breaks=seq(0,5,0.5)) +
+        theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+        geom_smooth(method='lm') +
+        geom_hline(y=4, color='blue') +
+        scale_color_gradient(high='red',low='yellow') +
+        labs(x='Correct base ratio',y = 'Log likelihood ratio', color='Base coverage', size = 'Number of occurance')
+p
 ```

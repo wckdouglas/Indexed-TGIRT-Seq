@@ -10,7 +10,9 @@ import numpy as np
 import glob
 import gzip
 import time
-import math
+from os import path
+
+programname = path.basename(sys.argv[0]).split('.')[0]
 
 #    ==================      Sequence class sotring left right record =============
 class seqRecord:
@@ -65,6 +67,8 @@ def getOptions():
             help="log likelihood threshold, if the p(max likelihood base)/p(2nd max likelihood base) do not exceed threshold, the position would have 'N' as base. (default: 100)")
     parser.add_argument('-s', '--seqError', type=float, default=0.01,
             help="Sequencing error probability (default: 0.01)")
+    parser.add_argument('-v', '--printScore', action = 'store_true',
+            help="Printing score for each base to stdout (default: False)")
     args = parser.parse_args()
     outputprefix = args.outputprefix
     inFastq1 = args.fastq1
@@ -73,11 +77,13 @@ def getOptions():
     threads = args.threads
     minReadCount = args.cutoff
     retainN = args.retainN
+    printScore = args.printScore
     barcodeCutOff = args.barcodeCutOff
     seqErr = args.seqError
     loglikThreshold = args.loglikThreshold
     return outputprefix, inFastq1, inFastq2, idxBase, threads, \
-            minReadCount, retainN, barcodeCutOff, seqErr, loglikThreshold
+            minReadCount, retainN, barcodeCutOff, seqErr, loglikThreshold,\
+            printScore
 
 
 def getLikelihood(countDict, seqErr, base):
@@ -92,7 +98,7 @@ def getLikelihood(countDict, seqErr, base):
     logLikelihood = np.sum(logProbabilities)
     return logLikelihood
 
-def likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold):
+def likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold, printScore, lock):
     """
     for each base in {A,T,C,G}
     1. get the count of each base at the position
@@ -111,13 +117,14 @@ def likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold):
     sortedLogLik = np.sort(logLikelihood)[::-1]
     maxLogLik = sortedLogLik[0]
     nullLogLik = logsumexp(sortedLogLik[1:])
-    loglikRatio = np.true_divide(maxLogLik - nullLogLik, np.sum(baseCount)) \
-                    if nullLogLik > 0 \
-                    else loglikThreshold + 1
+    loglikRatio = np.true_divide(maxLogLik - nullLogLik, np.sum(baseCount)) 
     concensusBase = regBase[logLikelihood == maxLogLik][0] \
                     if loglikRatio > loglikThreshold \
                     else 'N'
-    #print loglikRatio,'   ',np.sum(baseCount),'   ',countDict[concensusBase] if concensusBase in regBase else 0
+    if printScore:
+        lock.acquire()
+        print loglikRatio,',',np.sum(baseCount),',',countDict[concensusBase] if concensusBase in regBase else 0
+        lock.release()
     return concensusBase
 
 def calculateConcensusBase(arg):
@@ -127,26 +134,26 @@ def calculateConcensusBase(arg):
     return the maximum likelihood base at the given position,
         along with the mean quality of these concensus bases.
     """
-    seqList, qualList, pos, seqErr, loglikThreshold = arg
+    seqList, qualList, pos, seqErr, loglikThreshold, printScore, lock = arg
     columnBases = np.array([],dtype='string')
     qualities = np.array([],dtype='int64')
     for seq, qual in zip(seqList, qualList):
         columnBases = np.append(columnBases,seq[pos])
         qualities = np.append(qualities,ord(qual[pos]))
     uniqueBases, baseCount = np.unique(columnBases, return_counts=True)
-    concensusBase = likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold)
+    concensusBase = likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold, printScore, lock)
     # offset -33
     quality = np.mean(qualities[columnBases==concensusBase]) \
             if concensusBase in columnBases \
             else 33
     return concensusBase, quality
 
-def concensusSeq(seqList, qualList, positions, seqErr, loglikThreshold):
+def concensusSeq(seqList, qualList, positions, seqErr, loglikThreshold, printScore, lock):
     """given a list of sequences, a list of quality and sequence length. 
         assertion: all seq in seqlist should have same length (see function: selectSeqLength)
     return a consensus sequence and the mean quality line (see function: calculateConcensusBase)
     """
-    concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos, seqErr, loglikThreshold) \
+    concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos, seqErr, loglikThreshold, printScore, lock) \
                             for pos in positions])
     bases, quals = zip(*concensusPosition)
     sequence = ''.join(list(bases))
@@ -154,7 +161,7 @@ def concensusSeq(seqList, qualList, positions, seqErr, loglikThreshold):
     return sequence, quality
 
 
-def concensusPairs(reads, seqErr, loglikThreshold):
+def concensusPairs(reads, seqErr, loglikThreshold, printScore, lock):
     """ given a pair of reads as defined as the class: seqRecord
     return concensus sequence and mean quality of the pairs, 
         as well as the number of reads that supports the concnesus pairs
@@ -163,12 +170,12 @@ def concensusPairs(reads, seqErr, loglikThreshold):
     # get concensus left reads first
     sequenceLeft, qualityLeft = concensusSeq(reads.seqListLeft, reads.qualListLeft,  
                                             range(np.unique(reads.readLengthLeft())[0]),  
-                                            seqErr, loglikThreshold)
+                                            seqErr, loglikThreshold, printScore, lock)
     assert len(sequenceLeft) == len(qualityLeft), 'Wrong concensus sequence and quality!'
     # get concensus right reads first
     sequenceRight, qualityRight = concensusSeq(reads.seqListRight, reads.qualListRight,  
                                                 range(np.unique(reads.readLengthRight())[0]), 
-                                                seqErr, loglikThreshold)
+                                                seqErr, loglikThreshold, printScore, lock)
     assert len(sequenceRight) == len(qualityRight), 'Wrong concensus sequence and quality!'
     return sequenceLeft, qualityLeft, len(reads.seqListLeft), \
             sequenceRight, qualityRight, len(reads.seqListRight)
@@ -216,14 +223,13 @@ def errorFreeReads(args):
                   3. calculateConcensusBase
     """
     readCluster, index, counter, lock, minReadCount, \
-            retainN, seqErr, loglikThreshold = args
+            retainN, seqErr, loglikThreshold, printScore = args
     # skip if not enough sequences to perform voting
     reads = filterRead(readCluster)
     if reads.readCounts() > minReadCount:
         sequenceLeft, qualityLeft, supportedLeftReads, \
         sequenceRight, qualityRight, supportedRightReads = concensusPairs(reads, 
-                                                                        seqErr, 
-                                                                        loglikThreshold)
+                                                            seqErr, loglikThreshold, printScore, lock)
         if (retainN == False and 'N' not in sequenceRight and 'N' not in sequenceLeft) \
                 or (retainN == True and set(sequenceLeft)!={'N'}):
             lock.acquire()
@@ -234,7 +240,7 @@ def errorFreeReads(args):
             rightFile = '@cluster_%i %s %i reads\n%s\n+\n%s\n' \
                 %(counter.value, index, supportedRightReads, sequenceRight, qualityRight)
             if clusterCount % 100000 == 0:
-                stderr.write('[readCluster] Processed %i read clusters.\n' %clusterCount)
+                stderr.write('[%s] Processed %i read clusters.\n' %(programname,clusterCount))
             lock.release()
             return leftFile,rightFile
 
@@ -272,18 +278,18 @@ def main():
         3. writing concensus sequence to files
     """
     outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, \
-            retainN, barcodeCutOff, seqErr, loglikThreshold = getOptions()
+            retainN, barcodeCutOff, seqErr, loglikThreshold, printScore = getOptions()
     start = time.time()
 
     #print out parameters
-    stderr.write( '[readCluster] Using parameters: \n')
-    stderr.write( '[readCluster]     threads:                           %i\n' %threads)
-    stderr.write( '[readCluster]     indexed bases:                     %i\n' %idxBase)
-    stderr.write( '[readCluster]     minimum coverage:                  %i\n' %minReadCount)
-    stderr.write( '[readCluster]     outputPrefix:                      %s\n' %outputprefix)
-    stderr.write( '[readCluster]     retaining N-containing sequence:   %r\n' %retainN)
-    stderr.write( '[readCluster]     Sequencing error rate:             %.3f\n' %seqErr)
-    stderr.write( '[readCluster]     log likelihood threhold:           %.3f\n' %loglikThreshold)
+    stderr.write( '[%s] Using parameters: \n')
+    stderr.write( '[%s]     threads:                           %i\n' %(programname,threads))
+    stderr.write( '[%s]     indexed bases:                     %i\n' %(programname,idxBase))
+    stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,minReadCount))
+    stderr.write( '[%s]     outputPrefix:                      %s\n' %(programname,outputprefix))
+    stderr.write( '[%s]     retaining N-containing sequence:   %r\n' %(programname,retainN))
+    stderr.write( '[%s]     Sequencing error rate:             %.3f\n' %(programname,seqErr))
+    stderr.write( '[%s]     log likelihood threhold:           %.3f\n' %(programname,loglikThreshold))
     
     #barcodeDict = Shove('file://%s' %outputprefix) # reduced memory by: shove package
     barcodeDict = {}
@@ -291,7 +297,7 @@ def main():
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN)  \
             for read1,read2 in zip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
-    stderr.write('[readCluster] Extracted: %i barcodes sequence\n' %len(barcodeDict.keys()))
+    stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
 
     # From index library, generate error free reads
     # using multicore to process read clusters
@@ -299,7 +305,7 @@ def main():
     lock = Manager().Lock()
     pool = Pool(processes=threads, maxtasksperchild = 1)
     results = pool.map(errorFreeReads, [(barcodeDict[index],index, counter, lock, \
-                        minReadCount, retainN, seqErr, loglikThreshold) \
+                        minReadCount, retainN, seqErr, loglikThreshold, printScore) \
                         for index in barcodeDict.keys()])
     pool.close()
     pool.join()
@@ -307,9 +313,9 @@ def main():
     # will return None, results need to be filtered
     results = filter(None,results)
     if (len(results) == 0):
-        sys.exit('No concensus clusters!! \n')
+        sys.exit('[%s] No concensus clusters!! \n' %(programname))
     left, right = zip(*results)
-    stderr.write('[readCluster] Extracted error free reads\n')
+    stderr.write('[%s] Extracted error free reads\n' %(programname))
     # output file name
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
@@ -319,11 +325,11 @@ def main():
     [p.start() for p in processes]
     [p.join() for p in processes]
     # all done!
-    stderr.write('[readCluster] Finished writing error free reads\n')
-    stderr.write('[readCluster]     read1:            %s\n' %(read1File))
-    stderr.write('[readCluster]     read2:            %s\n' %(read2File))
-    stderr.write('[readCluster]     output clusters:  %i\n' %(len(left)))
-    stderr.write('[readCluster]     time lapsed:      %2.3f min\n' %(np.true_divide(time.time()-start,60)))
+    stderr.write('[%s] Finished writing error free reads\n')
+    stderr.write('[%s]     read1:            %s\n' %(programname, read1File))
+    stderr.write('[%s]     read2:            %s\n' %(programname, read2File))
+    stderr.write('[%s]     output clusters:  %i\n' %(programname, len(left)))
+    stderr.write('[%s]     time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
         
 if __name__ == '__main__':
