@@ -258,6 +258,7 @@ def readClustering(args):
     read1, read2, barcodeDict, idxBase, barcodeCutOff, retainedN = args
     idLeft, seqLeft, qualLeft = read1
     idRight, seqRight, qualRight = read2
+    assert idLeft.split(' ')[0] == idRight.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(idRight, idLeft)
     barcode = seqLeft[:idxBase]
     barcodeQualmean = int(np.mean([ord(q) for q in qualLeft[:idxBase]]) - 33)
     if ((retainedN==True and 'N' not in seqLeft and 'N' not in seqRight) or retainedN==False) \
@@ -271,20 +272,27 @@ def writeFile(stringList,outputFile):
     """
     write fastq lines to gzip files
     """
-    [outputFile.write(string) for string in stringList]
+    with gzip.open(outputFile,'wb') as outfile:
+        [outfile.write(string) for string in stringList]
     return 0
 
 
 def splitFiles(args):
-    read1,read2,subIdx, outputprefix, lock = args
+    read1,read2,subIdx, outputprefix, lock, counter = args
     idLeft, seqLeft, qualLeft = read1
     idRight, seqRight, qualRight = read2
     subBarcode = seqLeft[0:subIdx] 
+    lock.acquire()
+    counter.value +=1
+    lock.release()
+    readCount = counter.value
+    if readCount % 1000000 == 0:
+        stderr.write('[%s] Splitted %i reads\n' %(programname,readCount))
     if 'N' not in subBarcode:
-        subFq1 = outputprefix + '/' + subBarcode + '_R1.fq'
-        subFq2 = outputprefix + '/' + subBarcode + '_R2.fq'
+        subFq1 = outputprefix + '_tmp/' + subBarcode + '_R1.fq.gz'
+        subFq2 = outputprefix + '_tmp/' + subBarcode + '_R2.fq.gz'
         lock.acquire()
-        with open(subFq1,'a') as fq1, open(subFq2,'a') as fq2:
+        with gzip.open(subFq1,'ab') as fq1, gzip.open(subFq2,'ab') as fq2:
             fq1.write('@%s\n%s\n+\n%s\n' %(idLeft,seqLeft,qualLeft))
             fq2.write('@%s\n%s\n+\n%s\n' %(idRight,seqRight,qualRight))
         lock.release()
@@ -292,17 +300,18 @@ def splitFiles(args):
 
 def subCluster(inFastq1, inFastq2, subIdx, outputprefix, threads):
     lock = Manager().Lock()
+    counter = Manager().Value('i',0)
     pool = Pool(processes=threads, maxtasksperchild = 1)
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
-        subFastqs = pool.map(splitFiles,[(read1, read2, subIdx, outputprefix, lock) \
+        subFastqs = pool.map(splitFiles,[(read1, read2, subIdx, outputprefix, lock, counter) \
                 for read1,read2 in zip(FastqGeneralIterator(fq1), FastqGeneralIterator(fq2))])
     pool.close()
     pool.join()
     subFq1s, subFq2s = zip(*filter(None,set(subFastqs)))
     return subFq1s, subFq2s
 
- def clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount,
-                            retainN, barcodeCutOff, seqErr, loglikThreshold, printScore):
+def clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount,
+         retainN, barcodeCutOff, seqErr, loglikThreshold, printScore):
     barcodeDict = {}
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN)  \
@@ -330,9 +339,8 @@ def subCluster(inFastq1, inFastq2, subIdx, outputprefix, threads):
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
     # use two cores for parallel writing file
-    with gzip.open(read1File,'ab') as newfq1, gzip.open(read1File,'ab') as newfq2:
-        processes = [Process(target = writeFile, args = (seqRecords,file)) \
-                for seqRecords, file in zip([list(left),list(right)], [newfq1,newfq2])]
+    processes = [Process(target = writeFile, args = (seqRecords,file)) \
+                for seqRecords, file in zip([list(left),list(right)], [read1File, read2File])]
     [p.start() for p in processes]
     [p.join() for p in processes]
     # all done!
@@ -340,7 +348,6 @@ def subCluster(inFastq1, inFastq2, subIdx, outputprefix, threads):
     stderr.write('[%s]     read1:            %s\n' %(programname, read1File))
     stderr.write('[%s]     read2:            %s\n' %(programname, read2File))
     stderr.write('[%s]     output clusters:  %i\n' %(programname, len(left)))
-    stderr.write('[%s]     time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
 
 def main():
@@ -366,12 +373,22 @@ def main():
     stderr.write( '[%s]     log likelihood threhold:           %.3f\n' %(programname,loglikThreshold))
     
     # divide reads into subclusters
-    os.system('mkdir -p %s/tmp' %outputprefix)
-    subIdx = 4
-    subFq1, subFq2 = subCluster(inFastq1, inFastq2, subIdx, outputprefix, threads)
-    for subFq1, subFq2 in zip(subFq1, subFq2):
-        clusteringAndJoinFiles(outputprefix, subFq1, subFq2, idxBase, threads, minReadCount,
+    tempDir = '%s_tmp' %outputprefix
+    os.system('rm -rf  %s' %tempDir)
+    stderr.write('[%s] Cleaned %s\n'%(programname,tempDir))
+    os.system('mkdir -p %s' %tempDir)
+    subIdx = 0
+    if subIdx > 1:
+        subFq1, subFq2 = subCluster(inFastq1, inFastq2, subIdx, outputprefix, threads)
+        for subFq1, subFq2 in zip(subFq1, subFq2):
+            clusteringAndJoinFiles(outputprefix, subFq1, subFq2, idxBase, threads, minReadCount,
                                 retainN, barcodeCutOff, seqErr, loglikThreshold, printScore)
+    else:
+        clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount,
+                                retainN, barcodeCutOff, seqErr, loglikThreshold, printScore)
+    os.system('rm -rf  %s' %tempDir)
+    stderr.write('[%s] Cleaned %s\n'%(programname,tempDir))
+    stderr.write('[%s]     time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
         
 if __name__ == '__main__':
