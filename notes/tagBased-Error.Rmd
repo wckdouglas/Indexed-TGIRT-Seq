@@ -53,11 +53,11 @@ log(\hat{\theta}) \in \{log(L(base=A|jA,kC,lT,mG)),log(L(base=T|jA,kC,lT,mG)),lo
 let:
 
 * $\theta_{max}$ be $max(\log(\hat{\theta}))$     
-* $\hat{\theta}_{null}$ be $\hat{\theta}$ without $\theta_{max}$
+* $\hat{\theta}_{0}$ be $\hat{\theta}$ without $\theta_{max}$
 
 likelihood ratio test was performed by:
 \[
-log(\Lambda) = log(max(\hat{\theta})) - logsumexp(\hat{\theta}_{null})
+log(\Lambda) = log(max(\hat{\theta})) - logsumexp(\hat{\theta}_{0})
 \]
 
 If the $log(\Lambda)$ is greater than some threshold, the concensus base is determined to be the base that has maximum likelihood.

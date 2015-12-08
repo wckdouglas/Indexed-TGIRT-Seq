@@ -102,10 +102,10 @@ log(\hat{\theta}) \in \{log(L(base=A|jA,kC,lT,mG)),log(L(base=T|jA,kC,lT,mG)),lo
 <ul>
 <li><span class="math inline">\(\theta_{max}\)</span> be <span class="math inline">\(max(\log(\hat{\theta}))\)</span><br />
 </li>
-<li><span class="math inline">\(\hat{\theta}_{null}\)</span> be <span class="math inline">\(\hat{\theta}\)</span> without <span class="math inline">\(\theta_{max}\)</span></li>
+<li><span class="math inline">\(\hat{\theta}_{0}\)</span> be <span class="math inline">\(\hat{\theta}\)</span> without <span class="math inline">\(\theta_{max}\)</span></li>
 </ul>
 <p>likelihood ratio test was performed by: <span class="math display">\[
-log(\Lambda) = log(max(\hat{\theta})) - logsumexp(\hat{\theta}_{null})
+log(\Lambda) = log(max(\hat{\theta})) - logsumexp(\hat{\theta}_{0})
 \]</span></p>
 <p>If the <span class="math inline">\(log(\Lambda)\)</span> is greater than some threshold, the concensus base is determined to be the base that has maximum likelihood.</p>
 </div>
