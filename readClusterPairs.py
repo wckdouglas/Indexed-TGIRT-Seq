@@ -11,6 +11,7 @@ import glob
 import gzip
 import time
 from os import path
+import os
 
 programname = path.basename(sys.argv[0]).split('.')[0]
 
@@ -107,6 +108,7 @@ def likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold, printSc
     4. output concensus base or 'N'
     """
     regBase = np.array(['A','T','C','G'],dtype='string')
+    coverage = np.sum(baseCount)
     countDict = {} 
     for base in regBase:
         countDict[base] = baseCount[uniqueBases==base][0] \
@@ -122,9 +124,12 @@ def likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold, printSc
     concensusBase = regBase[logLikelihood == maxLogLik][0] \
                     if loglikRatio > loglikThreshold \
                     else 'N'
+    #fraction?
+    highestCount = np.amax(baseCount)
+    concensusBase = uniqueBases[baseCount == highestCount][0] if highestCount > 0.9 * coverage else 'N'
     if printScore:
         lock.acquire()
-        print loglikRatio,',',np.sum(baseCount),',',countDict[concensusBase] if concensusBase in regBase else 0
+        print loglikRatio,',',np.sum(baseCount),',',highestCount
         lock.release()
     return concensusBase
 
@@ -266,35 +271,39 @@ def writeFile(stringList,outputFile):
     """
     write fastq lines to gzip files
     """
-    with gzip.open(outputFile,'wb') as f:
-        [f.write(string) for string in stringList]
+    [outputFile.write(string) for string in stringList]
     return 0
 
-def main():
-    """
-    main function:
-        controlling work flow
-        1. generate read clusters by reading from fq1 and fq2
-        2. obtain concensus sequence from read clusters
-        3. writing concensus sequence to files
-    """
-    outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, \
-            retainN, barcodeCutOff, seqErr, loglikThreshold, printScore = getOptions()
-    start = time.time()
 
-    #print out parameters
-    stderr.write( '[%s] Using parameters: \n')
-    stderr.write( '[%s]     threads:                           %i\n' %(programname,threads))
-    stderr.write( '[%s]     indexed bases:                     %i\n' %(programname,idxBase))
-    stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,minReadCount))
-    stderr.write( '[%s]     outputPrefix:                      %s\n' %(programname,outputprefix))
-    stderr.write( '[%s]     retaining N-containing sequence:   %r\n' %(programname,retainN))
-    stderr.write( '[%s]     Sequencing error rate:             %.3f\n' %(programname,seqErr))
-    stderr.write( '[%s]     log likelihood threhold:           %.3f\n' %(programname,loglikThreshold))
-    
-    #barcodeDict = Shove('file://%s' %outputprefix) # reduced memory by: shove package
+def splitFiles(args):
+    read1,read2,subIdx, outputprefix, lock = args
+    idLeft, seqLeft, qualLeft = read1
+    idRight, seqRight, qualRight = read2
+    subBarcode = seqLeft[0:subIdx] 
+    if 'N' not in subBarcode:
+        subFq1 = outputprefix + '/' + subBarcode + '_R1.fq'
+        subFq2 = outputprefix + '/' + subBarcode + '_R2.fq'
+        lock.acquire()
+        with open(subFq1,'a') as fq1, open(subFq2,'a') as fq2:
+            fq1.write('@%s\n%s\n+\n%s\n' %(idLeft,seqLeft,qualLeft))
+            fq2.write('@%s\n%s\n+\n%s\n' %(idRight,seqRight,qualRight))
+        lock.release()
+        return subFq1, subFq2
+
+def subCluster(inFastq1, inFastq2, subIdx, outputprefix, threads):
+    lock = Manager().Lock()
+    pool = Pool(processes=threads, maxtasksperchild = 1)
+    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
+        subFastqs = pool.map(splitFiles,[(read1, read2, subIdx, outputprefix, lock) \
+                for read1,read2 in zip(FastqGeneralIterator(fq1), FastqGeneralIterator(fq2))])
+    pool.close()
+    pool.join()
+    subFq1s, subFq2s = zip(*filter(None,set(subFastqs)))
+    return subFq1s, subFq2s
+
+ def clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount,
+                            retainN, barcodeCutOff, seqErr, loglikThreshold, printScore):
     barcodeDict = {}
-    # generate read clusters
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN)  \
             for read1,read2 in zip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
@@ -321,8 +330,9 @@ def main():
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
     # use two cores for parallel writing file
-    processes = [Process(target = writeFile, args = (seqRecords,file)) \
-                for seqRecords, file in zip([list(left),list(right)], [read1File,read2File])]
+    with gzip.open(read1File,'ab') as newfq1, gzip.open(read1File,'ab') as newfq2:
+        processes = [Process(target = writeFile, args = (seqRecords,file)) \
+                for seqRecords, file in zip([list(left),list(right)], [newfq1,newfq2])]
     [p.start() for p in processes]
     [p.join() for p in processes]
     # all done!
@@ -331,6 +341,37 @@ def main():
     stderr.write('[%s]     read2:            %s\n' %(programname, read2File))
     stderr.write('[%s]     output clusters:  %i\n' %(programname, len(left)))
     stderr.write('[%s]     time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
+    return 0
+
+def main():
+    """
+    main function:
+        controlling work flow
+        1. generate read clusters by reading from fq1 and fq2
+        2. obtain concensus sequence from read clusters
+        3. writing concensus sequence to files
+    """
+    outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, \
+            retainN, barcodeCutOff, seqErr, loglikThreshold, printScore = getOptions()
+    start = time.time()
+
+    #print out parameters
+    stderr.write( '[%s] Using parameters: \n')
+    stderr.write( '[%s]     threads:                           %i\n' %(programname,threads))
+    stderr.write( '[%s]     indexed bases:                     %i\n' %(programname,idxBase))
+    stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,minReadCount))
+    stderr.write( '[%s]     outputPrefix:                      %s\n' %(programname,outputprefix))
+    stderr.write( '[%s]     retaining N-containing sequence:   %r\n' %(programname,retainN))
+    stderr.write( '[%s]     Sequencing error rate:             %.3f\n' %(programname,seqErr))
+    stderr.write( '[%s]     log likelihood threhold:           %.3f\n' %(programname,loglikThreshold))
+    
+    # divide reads into subclusters
+    os.system('mkdir -p %s/tmp' %outputprefix)
+    subIdx = 4
+    subFq1, subFq2 = subCluster(inFastq1, inFastq2, subIdx, outputprefix, threads)
+    for subFq1, subFq2 in zip(subFq1, subFq2):
+        clusteringAndJoinFiles(outputprefix, subFq1, subFq2, idxBase, threads, minReadCount,
+                                retainN, barcodeCutOff, seqErr, loglikThreshold, printScore)
     return 0
         
 if __name__ == '__main__':
