@@ -3,10 +3,13 @@
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from scipy.misc import logsumexp
 from sys import stderr
-import sys
 from multiprocessing import Pool, Manager, Process
-import argparse
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Must be before importing matplotlib.pyplot or pylab
+import matplotlib.pylab as plt
+import sys
+import argparse
 import glob
 import gzip
 import time
@@ -126,7 +129,7 @@ def likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold, printSc
                     else 'N'
     #fraction?
     highestCount = np.amax(baseCount)
-    concensusBase = uniqueBases[baseCount == highestCount][0] if highestCount > 0.9 * coverage else 'N'
+#    concensusBase = uniqueBases[baseCount == highestCount][0] if highestCount > 0.9 * coverage else 'N'
     if printScore:
         lock.acquire()
         print loglikRatio,',',np.sum(baseCount),',',highestCount
@@ -317,6 +320,19 @@ def clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, m
         map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN)  \
             for read1,read2 in zip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
     stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
+
+    #plotting inspection of barcode distribution
+    barcodeCount = np.array([record.readCounts() for record in barcodeDict.values()],dtype='int64')
+    figurename = '%s.png' %(outputprefix)
+    hist, bins = np.histogram(barcodeCount[barcodeCount<100],50)
+    centers = (bins[:-1] + bins[1:]) / 2
+    width = 0.7 * (bins[1] - bins[0])
+    fig = plt.figure()
+    plt.bar(centers,hist,align='center',width=width)
+    plt.xlabel("Number of occurence")
+    plt.ylabel("Count of tags")
+    fig.savefig(figurename)
+    stderr.write('Plotted %s.\n' %figurename)
 
     # From index library, generate error free reads
     # using multicore to process read clusters

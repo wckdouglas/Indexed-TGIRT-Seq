@@ -4,6 +4,7 @@ import pysam
 import sys
 import numpy as np
 import re
+import os
 import argparse
 from multiprocessing import Pool
 
@@ -118,9 +119,11 @@ def main():
     bamfile, qualThresh, ref, depth, threads = getOption()
     refFasta = pysam.Fastafile(ref) 
     with pysam.Samfile(bamfile,'rb') as bam:
-        if not bam._hasIndex() :
-            sys.stderr.write('[%s] Indexing %s \n' %(programnam,bamfile))
-            pysam.index(bamfile)
+        if bam._hasIndex():
+            os.remove(bamfile + '.bai')
+            sys.stderr.write('[%s] Removed original index: %s \n' %(programnam,bamfile))
+        sys.stderr.write('[%s] Indexing %s \n' %(programnam,bamfile))
+        pysam.index(bamfile)
     with pysam.Samfile(bamfile,'rb') as bam:
         sys.stderr.write('[%s] Pileup BAM file: %s \n' %(programnam,bamfile))
         refName = bam.references[0]
