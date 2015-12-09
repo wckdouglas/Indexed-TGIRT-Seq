@@ -80,17 +80,19 @@ df <- read_csv('threshold.dat',col_names=c('loglik','cov','match'),col_type='nnn
     mutate(ratio = match/cov) %>%
     filter(loglik < 10) %>%
     group_by(loglik, ratio,cov, match) %>%
-    summarize(count = n())
+    summarize(count = n()) %>%
+    ungroup() %>%
+    mutate(ratio = ifelse(ratio>0.9,'>0.9','<0.9'))
     
-p <- ggplot(data=df, aes(y= loglik, x=ratio)) +
-        geom_point(alpha=0.7,aes(color=cov,size=count)) +
-        scale_x_continuous(breaks=seq(0,1,0.05)) +
-        scale_y_continuous(breaks=seq(0,5,0.5)) +
-        theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
-        geom_smooth(method='lm') +
-        geom_vline(x=0.95, color='green') +
+p <- ggplot(data=df, aes(y= loglik, x=cov)) +
+        geom_point(alpha=0.7,aes(color=ratio,size=count)) +
+        scale_x_continuous(breaks=seq(0,50,5)) +
+#        scale_y_continuous(breaks=seq(0,5,0.5)) +
+#        theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+#        geom_smooth(method='lm') +
+        geom_hline(y=4, color='green') +
         scale_size_continuous(breaks=seq(0,300,50))+
-        scale_color_gradient(high='red',low='yellow') +
-        labs(x='Correct base ratio',y = 'Normalized log likelihood ratio', color='Base coverage', size = '# of events')
+ #       scale_color_gradient(high='red',low='yellow') +
+        labs(x='Coverage',y = 'Normalized log likelihood ratio', color='Correct base ratio', size = '# of events')
 p
 ```
