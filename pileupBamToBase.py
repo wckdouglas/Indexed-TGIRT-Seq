@@ -47,21 +47,22 @@ def cigarToSeq(cigar):
         cigarSeq += int(n)*str(s)
     return cigarSeq
 
-def extractQual(args):
+def extractBase(args):
     """
     for each alignment that mapped to the position,
     extract the base and the cigar annotation
     if the base is a Mapped position ('M') and have quality higher than the 
     given threshold, return the base
     """
-    sequence, quality, cigar, matchPos, indel, qualThresh = args
+    sequence, quality, cigar, matchPos, indel, qualThresh, bases = args
     if indel == 0 and matchPos != 0 and matchPos != (len(sequence)-1):
         cigarSeq = cigarToSeq(cigar)
         assert len(cigarSeq) == len(sequence), '\n%s\n%s' %(cigarSeq,sequence)
         qual = quality[matchPos]
         base = sequence[matchPos]
         if ord(qual) - 33 > qualThresh and cigarSeq[matchPos] == 'M':
-            return base
+            bases.append(base)
+    return 0
     
 def printLine(referenceBase, bases, count , position, coverage):
     """
@@ -91,16 +92,14 @@ def analyzePosition(pileupColumn, refBase, threads, position, qualThresh):
     used multiprocessing in here
     """
     cov = pileupColumn.n
-    pool = Pool(processes=threads, maxtasksperchild = 1)
-    bases = pool.map(extractQual,[(aln.alignment.seq, aln.alignment.qual, 
-                                    aln.alignment.cigarstring, aln.qpos,
-                                    aln.indel, qualThresh) for aln in pileupColumn.pileups \
-                                            if (not aln.alignment.is_secondary)])
+    posbases = Manager().list([])
+    pool = Pool(processes=threads)
+    [pool.apply(extractBase, (aln.alignment.seq, aln.alignment.qual, aln.alignment.cigarstring, aln.qpos,
+                                    aln.indel, qualThresh, bases)) \
+                            for aln in pileupColumn.pileups if not aln.alignment.is_secondary]
     pool.close()
     pool.join()
-    bases = filter(None,bases)
-    bases = np.array(bases,dtype='string')
-    bases, count = np.unique(bases,return_counts=True)
+    bases, count = np.unique(np.array(posbases,dtype='string'),return_counts=True)
     printLine(refBase, bases, count, position, cov) 
     return 0
 

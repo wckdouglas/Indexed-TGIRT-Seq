@@ -188,7 +188,8 @@ def selectSeqLength(readLengthArray):
     seqlength, count = np.unique(readLengthArray, return_counts=True)
     return seqlength[count==max(count)][0]
 
-def errorFreeReads(args):
+def errorFreeReads(readCluster, index, counter, lock, minReadCount, 
+        retainN, seqErr, loglikThreshold, printScore, results):
     """
     main function for getting concensus sequences from read clusters.
     return  a pair of concensus reads with a 4-line fastq format
@@ -196,8 +197,6 @@ def errorFreeReads(args):
                   2. concensusPairs,
                   3. calculateConcensusBase
     """
-    readCluster, index, counter, lock, minReadCount, \
-            retainN, seqErr, loglikThreshold, printScore = args
     #if readCluster.readCounts() > minReadCount:
     #    reads = filterRead(readCluster)
     # skip if not enough sequences to perform voting
@@ -208,14 +207,14 @@ def errorFreeReads(args):
             lock.acquire()
             counter.value += 1
             clusterCount = counter.value
-            leftFile = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
+            leftRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
                 %(counter.value, index, supportedLeftReads, sequenceLeft, qualityLeft)
-            rightFile = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
+            rightRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
                 %(counter.value, index, supportedRightReads, sequenceRight, qualityRight)
             if clusterCount % 100000 == 0:
                 stderr.write('[%s] Processed %i read clusters.\n' %(programname,clusterCount))
             lock.release()
-            return leftFile,rightFile
+            results.append(leftRecord,rightRecord)
 
 def readClustering(args):
     """
@@ -230,8 +229,7 @@ def readClustering(args):
     barcodeQualmean = int(np.mean([ord(q) for q in qualLeft[:idxBase]]) - 33)
     if ('N' not in barcode and barcodeQualmean > barcodeCutOff ) and \
     not any(pattern in barcode for pattern in ['AAAA','CCCC','TTTT','GGGG']) and \
-    ((retainedN==False and 'N' not in seqLeft and 'N' not in seqRight) or retainedN==True) and \
-    seqLeft[idxBase:(idxBase+6)] == 'TTTTGA':
+    ((retainedN==False and 'N' not in seqLeft and 'N' not in seqRight) or retainedN==True): #and seqLeft[idxBase:(idxBase+6)] == 'TTTTGA':
         seqLeft = seqLeft[idxBase:]
         barcodeDict.setdefault(barcode,seqRecord()) 
         barcodeDict[barcode].addRecord(seqRight, qualRight, seqLeft, qualLeft)
@@ -249,7 +247,7 @@ def writeFile(outputprefix, leftReads, rightReads):
             assert left.split(' ')[0] == right.split(' ')[0], 'Wrong order pairs!!'
             read1.write(left)
             read2.write(right)
-    return 0
+    return read1File, read2File
 
 def plotBCdistribution(barcodeDict, outputprefix):
     #plotting inspection of barcode distribution
@@ -279,21 +277,21 @@ def clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, m
     # using multicore to process read clusters
     counter = Manager().Value('i',0)
     lock = Manager().Lock()
-    pool = Pool(processes=threads, maxtasksperchild = 1)
-    results = pool.map(errorFreeReads, [(barcodeDict[index],index, counter, lock, \
-                        minReadCount, retainN, seqErr, loglikThreshold, printScore) \
-                        for index in barcodeDict.keys()])
+    results = Manager().list([])
+    pool = Pool(processes=threads)
+    [pool.apply(errorFreeReads, (barcodeDict[index],index, counter, lock, 
+                        minReadCount, retainN, seqErr, loglikThreshold, printScore, results)) \
+                for index in barcodeDict.keys()]
     pool.close()
     pool.join()
     # since some cluster that do not have sufficient reads
     # will return None, results need to be filtered
-    results = filter(None,results)
     if (len(results) == 0):
         sys.exit('[%s] No concensus clusters!! \n' %(programname))
     left, right = zip(*results)
     stderr.write('[%s] Extracted error free reads\n' %(programname))
     # use two cores for parallel writing file
-    writeFile(outputprefix, list(left), list(right))
+    read1File, read2File = writeFile(outputprefix, list(left), list(right))
 
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)
