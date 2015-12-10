@@ -66,7 +66,7 @@ def getOptions():
     parser.add_argument('-q', '--barcodeCutOff', type=int, default=30,
         help="Average base calling quality for barcode sequence (default=30)")
     parser.add_argument('-l', '--loglikThreshold', type=float, default=4,
-            help="log likelihood threshold, if the p(max likelihood base)/p(2nd max likelihood base) do not exceed threshold, the position would have 'N' as base. (default: 4)")
+            help="log likelihood threshold, if the p(max likelihood base)/sum(p(other base)) do not exceed threshold, the position would have 'N' as base. Detail: http://rawgit.com/wckdouglas/Indexed-TGIRT-Seq/master/notes/tagBased-Error.html (default: 4) ")
     parser.add_argument('-s', '--seqError', type=float, default=0.01,
             help="Sequencing error probability (default: 0.01)")
     parser.add_argument('-v', '--printScore', action = 'store_true',
@@ -85,9 +85,8 @@ def getOptions():
     barcodeCutOff = args.barcodeCutOff
     seqErr = args.seqError
     loglikThreshold = args.loglikThreshold
-    return outputprefix, inFastq1, inFastq2, idxBase, threads, \
-            minReadCount, retainN, barcodeCutOff, seqErr, loglikThreshold,\
-            printScore
+    return outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, \
+            retainN, barcodeCutOff, seqErr, loglikThreshold, printScore
 
 
 def getLikelihood(countDict, seqErr, base):
@@ -114,22 +113,17 @@ def likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold, printSc
     coverage = np.sum(baseCount)
     countDict = {} 
     for base in regBase:
-        countDict[base] = baseCount[uniqueBases==base][0] \
-                            if base in uniqueBases \
-                            else 0 
-    logLikelihood = np.array([getLikelihood(countDict, seqErr, base) \
-                            for base in regBase],dtype='float64')
+        countDict[base] = baseCount[uniqueBases==base][0] if base in uniqueBases else 0 
+    logLikelihood = np.array([getLikelihood(countDict, seqErr, base) for base in regBase],dtype='float64')
     sortedLogLik = np.sort(logLikelihood)[::-1]
     maxLogLik = sortedLogLik[0]
     nullLogLik = logsumexp(sortedLogLik[1:])
     testStat = -2 * nullLogLik + 2 * maxLogLik #np.sum(baseCount)) 
     loglikRatio = np.true_divide(maxLogLik - nullLogLik, np.sum(baseCount)) 
-    concensusBase = regBase[logLikelihood == maxLogLik][0] \
-                    if loglikRatio > loglikThreshold \
-                    else 'N'
-    #fraction?
-    highestCount = np.amax(baseCount)
-#    concensusBase = uniqueBases[baseCount == highestCount][0] if highestCount > 0.9 * coverage else 'N'
+    concensusBase = regBase[logLikelihood == maxLogLik][0] if loglikRatio >= loglikThreshold else 'N'
+#    #fraction?
+#    highestCount = np.amax(baseCount)
+#    concensusBase = uniqueBases[baseCount == highestCount][0] if highestCount == coverage else 'N'
     if printScore:
         lock.acquire()
         print loglikRatio,',',np.sum(baseCount),',',highestCount
@@ -152,9 +146,7 @@ def calculateConcensusBase(arg):
     uniqueBases, baseCount = np.unique(columnBases, return_counts=True)
     concensusBase = likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold, printScore, lock)
     # offset -33
-    quality = np.mean(qualities[columnBases==concensusBase]) \
-            if concensusBase in columnBases \
-            else 33
+    quality = np.mean(qualities[columnBases==concensusBase]) if concensusBase in columnBases else 33
     return concensusBase, quality
 
 def concensusSeq(seqList, qualList, positions, seqErr, loglikThreshold, printScore, lock):
@@ -162,8 +154,7 @@ def concensusSeq(seqList, qualList, positions, seqErr, loglikThreshold, printSco
         assertion: all seq in seqlist should have same length (see function: selectSeqLength)
     return a consensus sequence and the mean quality line (see function: calculateConcensusBase)
     """
-    concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos, seqErr, loglikThreshold, printScore, lock) \
-                            for pos in positions])
+    concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos, seqErr, loglikThreshold, printScore, lock) for pos in positions])
     bases, quals = zip(*concensusPosition)
     sequence = ''.join(list(bases))
     quality = ''.join([chr(int(q)) for q in list(quals)])
@@ -197,32 +188,6 @@ def selectSeqLength(readLengthArray):
     seqlength, count = np.unique(readLengthArray, return_counts=True)
     return seqlength[count==max(count)][0]
 
-def getCompatibleSeqs(seqlist, qualList, readLengthList):
-    """ filter the read clusters to retrain all the sequence 
-    in the list of sequence with the highest vote of read length
-    see function: selectSeqLength
-    """
-    selectedLength =  selectSeqLength(readLengthList)
-    seqs = seqlist[readLengthList == selectedLength]
-    quals = qualList[readLengthList == selectedLength]
-    return seqs, quals
-
-def filterRead(readCluster):
-    """
-    Given a read cluster (seqRecord object),
-    filter out all sequences that have a distinctive length (for getting concensus sequence from same length reads)
-    and create a seqRecord object with the filtered sequences only
-    """
-    leftSeqs, leftQuals = getCompatibleSeqs(readCluster.seqListLeft, 
-                                            readCluster.qualListLeft, 
-                                            readCluster.readLengthLeft())
-    rightSeqs, rightQuals = getCompatibleSeqs(readCluster.seqListRight, 
-                                            readCluster.qualListRight, 
-                                            readCluster.readLengthRight())
-    reads = seqRecord()
-    [reads.addRecord(rs, rq, ls, lq) for rs, rq, ls, lq in zip(rightSeqs, rightQuals, leftSeqs, leftQuals)]
-    return reads
-
 def errorFreeReads(args):
     """
     main function for getting concensus sequences from read clusters.
@@ -233,20 +198,19 @@ def errorFreeReads(args):
     """
     readCluster, index, counter, lock, minReadCount, \
             retainN, seqErr, loglikThreshold, printScore = args
+    #if readCluster.readCounts() > minReadCount:
+    #    reads = filterRead(readCluster)
     # skip if not enough sequences to perform voting
-    reads = filterRead(readCluster)
-    if reads.readCounts() > minReadCount:
+    if readCluster is not None and readCluster.readCounts() > minReadCount:
         sequenceLeft, qualityLeft, supportedLeftReads, \
-        sequenceRight, qualityRight, supportedRightReads = concensusPairs(reads, 
-                                                            seqErr, loglikThreshold, printScore, lock)
-        if (retainN == False and 'N' not in sequenceRight and 'N' not in sequenceLeft) \
-                or (retainN == True and set(sequenceLeft)!={'N'}):
+        sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster, seqErr, loglikThreshold, printScore, lock)
+        if (retainN == False and 'N' not in sequenceRight and 'N' not in sequenceLeft) or (retainN == True and set(sequenceLeft)!={'N'}):
             lock.acquire()
             counter.value += 1
             clusterCount = counter.value
-            leftFile = '@cluster_%i %s %i reads\n%s\n+\n%s\n' \
+            leftFile = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
                 %(counter.value, index, supportedLeftReads, sequenceLeft, qualityLeft)
-            rightFile = '@cluster_%i %s %i reads\n%s\n+\n%s\n' \
+            rightFile = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
                 %(counter.value, index, supportedRightReads, sequenceRight, qualityRight)
             if clusterCount % 100000 == 0:
                 stderr.write('[%s] Processed %i read clusters.\n' %(programname,clusterCount))
@@ -264,75 +228,52 @@ def readClustering(args):
     assert idLeft.split(' ')[0] == idRight.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(idRight, idLeft)
     barcode = seqLeft[:idxBase]
     barcodeQualmean = int(np.mean([ord(q) for q in qualLeft[:idxBase]]) - 33)
-    if ((retainedN==True and 'N' not in seqLeft and 'N' not in seqRight) or retainedN==False) \
-            and ('N' not in barcode and barcodeQualmean > barcodeCutOff):
+    if ('N' not in barcode and barcodeQualmean > barcodeCutOff ) and \
+    not any(pattern in barcode for pattern in ['AAAA','CCCC','TTTT','GGGG']) and \
+    ((retainedN==False and 'N' not in seqLeft and 'N' not in seqRight) or retainedN==True) and \
+    seqLeft[idxBase:(idxBase+6)] == 'TTTTGA':
         seqLeft = seqLeft[idxBase:]
         barcodeDict.setdefault(barcode,seqRecord()) 
         barcodeDict[barcode].addRecord(seqRight, qualRight, seqLeft, qualLeft)
     return 0
 
-def writeFile(stringList,outputFile):
+def writeFile(outputprefix, leftReads, rightReads):
     """
     write fastq lines to gzip files
     """
-    with gzip.open(outputFile,'wb') as outfile:
-        [outfile.write(string) for string in stringList]
+    # output file name
+    read1File = outputprefix + '_R1_001.fastq.gz'
+    read2File = outputprefix + '_R2_001.fastq.gz'
+    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
+        for left, right in zip(leftReads,rightReads):
+            assert left.split(' ')[0] == right.split(' ')[0], 'Wrong order pairs!!'
+            read1.write(left)
+            read2.write(right)
     return 0
 
-
-def splitFiles(args):
-    read1,read2,subIdx, outputprefix, lock, counter = args
-    idLeft, seqLeft, qualLeft = read1
-    idRight, seqRight, qualRight = read2
-    subBarcode = seqLeft[0:subIdx] 
-    lock.acquire()
-    counter.value +=1
-    lock.release()
-    readCount = counter.value
-    if readCount % 1000000 == 0:
-        stderr.write('[%s] Splitted %i reads\n' %(programname,readCount))
-    if 'N' not in subBarcode:
-        subFq1 = outputprefix + '_tmp/' + subBarcode + '_R1.fq.gz'
-        subFq2 = outputprefix + '_tmp/' + subBarcode + '_R2.fq.gz'
-        lock.acquire()
-        with gzip.open(subFq1,'ab') as fq1, gzip.open(subFq2,'ab') as fq2:
-            fq1.write('@%s\n%s\n+\n%s\n' %(idLeft,seqLeft,qualLeft))
-            fq2.write('@%s\n%s\n+\n%s\n' %(idRight,seqRight,qualRight))
-        lock.release()
-        return subFq1, subFq2
-
-def subCluster(inFastq1, inFastq2, subIdx, outputprefix, threads):
-    lock = Manager().Lock()
-    counter = Manager().Value('i',0)
-    pool = Pool(processes=threads, maxtasksperchild = 1)
-    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
-        subFastqs = pool.map(splitFiles,[(read1, read2, subIdx, outputprefix, lock, counter) \
-                for read1,read2 in zip(FastqGeneralIterator(fq1), FastqGeneralIterator(fq2))])
-    pool.close()
-    pool.join()
-    subFq1s, subFq2s = zip(*filter(None,set(subFastqs)))
-    return subFq1s, subFq2s
-
-def clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount,
-         retainN, barcodeCutOff, seqErr, loglikThreshold, printScore):
-    barcodeDict = {}
-    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
-        map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN)  \
-            for read1,read2 in zip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
-    stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
-
+def plotBCdistribution(barcodeDict, outputprefix):
     #plotting inspection of barcode distribution
     barcodeCount = np.array([record.readCounts() for record in barcodeDict.values()],dtype='int64')
     figurename = '%s.png' %(outputprefix)
-    hist, bins = np.histogram(barcodeCount[barcodeCount<100],50)
+    hist, bins = np.histogram(barcodeCount[barcodeCount<50],50)
     centers = (bins[:-1] + bins[1:]) / 2
     width = 0.7 * (bins[1] - bins[0])
     fig = plt.figure()
     plt.bar(centers,hist,align='center',width=width)
     plt.xlabel("Number of occurence")
     plt.ylabel("Count of tags")
+    plt.yscale('log',nonposy='clip')
     fig.savefig(figurename)
     stderr.write('Plotted %s.\n' %figurename)
+    return 0
+
+def clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount,
+         retainN, barcodeCutOff, seqErr, loglikThreshold, printScore):
+    barcodeDict = {}
+    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
+        map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN) for read1,read2 in zip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
+    stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
+    plotBCdistribution(barcodeDict, outputprefix)
 
     # From index library, generate error free reads
     # using multicore to process read clusters
@@ -351,16 +292,11 @@ def clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, m
         sys.exit('[%s] No concensus clusters!! \n' %(programname))
     left, right = zip(*results)
     stderr.write('[%s] Extracted error free reads\n' %(programname))
-    # output file name
-    read1File = outputprefix + '_R1_001.fastq.gz'
-    read2File = outputprefix + '_R2_001.fastq.gz'
     # use two cores for parallel writing file
-    processes = [Process(target = writeFile, args = (seqRecords,file)) \
-                for seqRecords, file in zip([list(left),list(right)], [read1File, read2File])]
-    [p.start() for p in processes]
-    [p.join() for p in processes]
+    writeFile(outputprefix, list(left), list(right))
+
     # all done!
-    stderr.write('[%s] Finished writing error free reads\n')
+    stderr.write('[%s] Finished writing error free reads\n' %programname)
     stderr.write('[%s]     read1:            %s\n' %(programname, read1File))
     stderr.write('[%s]     read2:            %s\n' %(programname, read2File))
     stderr.write('[%s]     output clusters:  %i\n' %(programname, len(left)))

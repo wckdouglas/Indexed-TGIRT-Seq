@@ -68,11 +68,11 @@ def printLine(referenceBase, bases, count , position, coverage):
     for each column position (pileup column), output the 
     1. position on the chromosome
     2. reference base on the ref-fasta
-    3. count of A, C, T, G
+    3. count of A, T, C, G
     """
     regularBase = np.array(['A','T','C','G'],dtype='string')
     baseDict = {}
-    coverage = np.sum(count[np.in1d(bases,regularBase)]) #only high qual base were counted in coverage
+    #coverage = np.sum(count[np.in1d(bases,regularBase)]) #only high qual base were counted in coverage
     for base in regularBase:
         if base not in bases:
             baseDict[base] = 0
@@ -118,12 +118,12 @@ def main():
     programnam = sys.argv[0]
     bamfile, qualThresh, ref, depth, threads = getOption()
     refFasta = pysam.Fastafile(ref) 
-    with pysam.Samfile(bamfile,'rb') as bam:
-        if bam._hasIndex():
-            os.remove(bamfile + '.bai')
-            sys.stderr.write('[%s] Removed original index: %s \n' %(programnam,bamfile))
-        sys.stderr.write('[%s] Indexing %s \n' %(programnam,bamfile))
-        pysam.index(bamfile)
+    index = bamfile + '.bai'
+    if os.path.exists(index):
+        os.remove(index)
+        sys.stderr.write('[%s] Removed original index: %s \n' %(programnam,index))
+    sys.stderr.write('[%s] Indexing %s \n' %(programnam,bamfile))
+    pysam.index(bamfile)
     with pysam.Samfile(bamfile,'rb') as bam:
         sys.stderr.write('[%s] Pileup BAM file: %s \n' %(programnam,bamfile))
         refName = bam.references[0]
