@@ -6,7 +6,7 @@ import numpy as np
 import re
 import os
 import argparse
-from multiprocessing import Pool
+from multiprocessing import Pool, Manager
 
 def getOption():
     """
@@ -47,14 +47,13 @@ def cigarToSeq(cigar):
         cigarSeq += int(n)*str(s)
     return cigarSeq
 
-def extractBase(args):
+def extractBase(sequence, quality, cigar, matchPos, indel, qualThresh, bases):
     """
     for each alignment that mapped to the position,
     extract the base and the cigar annotation
     if the base is a Mapped position ('M') and have quality higher than the 
     given threshold, return the base
     """
-    sequence, quality, cigar, matchPos, indel, qualThresh, bases = args
     if indel == 0 and matchPos != 0 and matchPos != (len(sequence)-1):
         cigarSeq = cigarToSeq(cigar)
         assert len(cigarSeq) == len(sequence), '\n%s\n%s' %(cigarSeq,sequence)
@@ -95,7 +94,7 @@ def analyzePosition(pileupColumn, refBase, threads, position, qualThresh):
     posbases = Manager().list([])
     pool = Pool(processes=threads)
     [pool.apply(extractBase, (aln.alignment.seq, aln.alignment.qual, aln.alignment.cigarstring, aln.qpos,
-                                    aln.indel, qualThresh, bases)) \
+                                    aln.indel, qualThresh, posbases)) \
                             for aln in pileupColumn.pileups if not aln.alignment.is_secondary]
     pool.close()
     pool.join()

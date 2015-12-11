@@ -88,7 +88,6 @@ def getOptions():
     return outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, \
             retainN, barcodeCutOff, seqErr, loglikThreshold, printScore
 
-
 def getLikelihood(countDict, seqErr, base):
     """
     Using sequencing error rate as conditional probability: e.g. P(A|base=C) = 0.01
@@ -121,9 +120,6 @@ def likelihoodSelection(uniqueBases, baseCount, seqErr, loglikThreshold, printSc
     testStat = -2 * nullLogLik + 2 * maxLogLik #np.sum(baseCount)) 
     loglikRatio = np.true_divide(maxLogLik - nullLogLik, np.sum(baseCount)) 
     concensusBase = regBase[logLikelihood == maxLogLik][0] if loglikRatio >= loglikThreshold else 'N'
-#    #fraction?
-#    highestCount = np.amax(baseCount)
-#    concensusBase = uniqueBases[baseCount == highestCount][0] if highestCount == coverage else 'N'
     if printScore:
         lock.acquire()
         print loglikRatio,',',np.sum(baseCount),',',highestCount
