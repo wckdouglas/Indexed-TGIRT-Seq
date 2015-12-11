@@ -126,6 +126,6 @@ p2 <- ggplot(data=df, aes(y= loglik, x=cov)) +
 ggdraw() +
     draw_plot(p1 + labs(y = ' ', x= ' '),0.02,0.5,0.98,0.48) +
     draw_plot(p2 + labs(y=' '),0.02,0,0.98,0.48) +
-    draw_plot_label(c('Simulated Data','Subsampled Data'),c(0,0),c(1,0.5)) +
+    draw_plot_label(c('A. Simulated Data','B. Subsampled Data'),c(0,0),c(1,0.5)) +
     draw_plot_label( 'Normalized log likelihood ratio',0,0, angle=90)
 ```
