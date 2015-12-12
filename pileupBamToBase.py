@@ -74,7 +74,7 @@ def extractBase(sequence, quality, cigar, matchPos, qualThresh, bases):
     if the base is a Mapped position ('M') and have quality higher than the 
     given threshold, return the base
     """
-    if matchPos > 2 and matchPos < (len(sequence)-3):
+    if matchPos > 2 and matchPos < (len(sequence)-3) and not np.any(np.in1d(['I','D'],list(cigar))):
         cigarSeq = cigarToSeq(cigar)
         assert len(cigarSeq) == len(sequence), '\n%s\n%s' %(cigarSeq,sequence)
         qual = quality[matchPos]
