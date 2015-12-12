@@ -31,6 +31,26 @@ def getOption():
     threads =  args.threads
     return bamfile, qualThresh, refFasta, depth, threads
     
+def printLine(referenceBase, bases, count , position, coverage):
+    """
+    for each column position (pileup column), output the 
+    1. position on the chromosome
+    2. reference base on the ref-fasta
+    3. count of A, T, C, G
+    """
+    regularBase = np.array(['A','T','C','G'],dtype='string')
+    baseDict = {}
+    coverage = np.sum(count[np.in1d(bases,regularBase)]) #only high qual base were counted in coverage
+    for base in regularBase:
+        if base not in bases:
+            baseDict[base] = 0
+        else: 
+            baseDict[base] = count[bases==base][0]
+    line = str(position) +'\t' + referenceBase  + '\t' + str(coverage)
+    for base in regularBase:
+        line += '\t' + str(baseDict[base])
+    print line
+    return 0
 
 def cigarToSeq(cigar):
     """
@@ -47,41 +67,20 @@ def cigarToSeq(cigar):
         cigarSeq += int(n)*str(s)
     return cigarSeq
 
-def extractBase(sequence, quality, cigar, matchPos, indel, qualThresh, bases):
+def extractBase(sequence, quality, cigar, matchPos, qualThresh, bases):
     """
     for each alignment that mapped to the position,
     extract the base and the cigar annotation
     if the base is a Mapped position ('M') and have quality higher than the 
     given threshold, return the base
     """
-    if indel == 0 and matchPos != 0 and matchPos != (len(sequence)-1):
+    if matchPos > 2 and matchPos < (len(sequence)-3):
         cigarSeq = cigarToSeq(cigar)
         assert len(cigarSeq) == len(sequence), '\n%s\n%s' %(cigarSeq,sequence)
         qual = quality[matchPos]
         base = sequence[matchPos]
-        if ord(qual) - 33 > qualThresh and cigarSeq[matchPos] == 'M':
+        if (ord(qual) - 33) > qualThresh and cigarSeq[matchPos] == 'M':
             bases.append(base)
-    return 0
-    
-def printLine(referenceBase, bases, count , position, coverage):
-    """
-    for each column position (pileup column), output the 
-    1. position on the chromosome
-    2. reference base on the ref-fasta
-    3. count of A, T, C, G
-    """
-    regularBase = np.array(['A','T','C','G'],dtype='string')
-    baseDict = {}
-    #coverage = np.sum(count[np.in1d(bases,regularBase)]) #only high qual base were counted in coverage
-    for base in regularBase:
-        if base not in bases:
-            baseDict[base] = 0
-        else: 
-            baseDict[base] = count[bases==base][0]
-    line = str(position) +'\t' + referenceBase  + '\t' + str(coverage)
-    for base in regularBase:
-        line += '\t' + str(baseDict[base])
-    print line
     return 0
 
 def analyzePosition(pileupColumn, refBase, threads, position, qualThresh):
@@ -94,8 +93,7 @@ def analyzePosition(pileupColumn, refBase, threads, position, qualThresh):
     posbases = Manager().list([])
     pool = Pool(processes=threads)
     [pool.apply(extractBase, (aln.alignment.seq, aln.alignment.qual, aln.alignment.cigarstring, aln.qpos,
-                                    aln.indel, qualThresh, posbases)) \
-                            for aln in pileupColumn.pileups if not aln.alignment.is_secondary]
+                        qualThresh, posbases)) for aln in pileupColumn.pileups if (not aln.alignment.is_secondary and aln.indel==0)]
     pool.close()
     pool.join()
     bases, count = np.unique(np.array(posbases,dtype='string'),return_counts=True)

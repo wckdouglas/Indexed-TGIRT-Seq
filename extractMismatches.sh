@@ -2,7 +2,7 @@
 
 PROJECTPATH=/scratch/02727/cdw2854/TGIRT_plasma_dna/syntheticOligo
 DATAPATH=$PROJECTPATH/rawData
-THREADS=24
+THREADS=12
 
 for FQ1 in $DATAPATH/*R1_001.fastq.gz
 do
