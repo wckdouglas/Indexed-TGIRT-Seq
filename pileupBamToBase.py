@@ -1,12 +1,13 @@
 #!/bin/env python
 
-import pysam
+import pysam #conda: pysam 0.6
 import sys
 import numpy as np
 import re
 import os
 import argparse
 from multiprocessing import Pool, Manager
+
 
 def getOption():
     """
@@ -92,7 +93,7 @@ def analyzePosition(pileupColumn, refBase, threads, position, qualThresh):
     cov = pileupColumn.n
     posbases = Manager().list([])
     pool = Pool(processes=threads)
-    [pool.apply(extractBase, (aln.alignment.seq, aln.alignment.qual, aln.alignment.cigarstring, aln.qpos,
+    [pool.apply(extractBase, (aln.alignment.seq, aln.alignment.qual, aln.alignment.cigarstring, aln.query_position,
                         qualThresh, posbases)) for aln in pileupColumn.pileups if (not aln.alignment.is_secondary and aln.indel==0)]
     pool.close()
     pool.join()
