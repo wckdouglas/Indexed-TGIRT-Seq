@@ -24,13 +24,16 @@ def getOption():
             default = 8000, help='Maximum depth (default: 8000)')
     parser.add_argument('-p','--threads', type=int, 
             default = 1, help='Threads to used (default: 1)')
+    parser.add_argument('-s','--skipBases', type=int,  
+            default = 3, help='Bases at the end positions that will not be evaluated (default: 3)')
     args = parser.parse_args()
     bamfile = args.bamfile
     qualThresh = args.qualThresh
     refFasta = args.refFasta
     depth =  args.depth
     threads =  args.threads
-    return bamfile, qualThresh, refFasta, depth, threads
+    skipBases = args.skipBases
+    return bamfile, qualThresh, refFasta, depth, threads, skipBases
     
 def printLine(referenceBase, bases, count , position, coverage):
     """
@@ -68,14 +71,14 @@ def cigarToSeq(cigar):
         cigarSeq += int(n)*str(s)
     return cigarSeq
 
-def extractBase(sequence, quality, cigar, matchPos, qualThresh, bases):
+def extractBase(sequence, quality, cigar, matchPos, qualThresh, bases, skipBases):
     """
     for each alignment that mapped to the position,
     extract the base and the cigar annotation
     if the base is a Mapped position ('M') and have quality higher than the 
     given threshold, return the base
     """
-    if matchPos > 2 and matchPos < (len(sequence)-3) and not np.any(np.in1d(['I','D'],list(cigar))):
+    if matchPos > (skipBases-1) and matchPos < (len(sequence)-skipBases) and not np.any(np.in1d(['I','D'],list(cigar))):
         cigarSeq = cigarToSeq(cigar)
         assert len(cigarSeq) == len(sequence), '\n%s\n%s' %(cigarSeq,sequence)
         qual = quality[matchPos]
@@ -84,7 +87,7 @@ def extractBase(sequence, quality, cigar, matchPos, qualThresh, bases):
             bases.append(base)
     return 0
 
-def analyzePosition(pileupColumn, refBase, threads, position, qualThresh):
+def analyzePosition(pileupColumn, refBase, threads, position, qualThresh, skipBases):
     """
     for each pileup position, extracted all alignments using pysam
     processing each alignment is computationally heavy.
@@ -94,7 +97,7 @@ def analyzePosition(pileupColumn, refBase, threads, position, qualThresh):
     posbases = Manager().list([])
     pool = Pool(processes=threads)
     [pool.apply(extractBase, (aln.alignment.seq, aln.alignment.qual, aln.alignment.cigarstring, aln.query_position,
-                        qualThresh, posbases)) for aln in pileupColumn.pileups if (not aln.alignment.is_secondary and aln.indel==0)]
+                        qualThresh, posbases, skipBases)) for aln in pileupColumn.pileups if (not aln.alignment.is_secondary and aln.indel==0)]
     pool.close()
     pool.join()
     bases, count = np.unique(np.array(posbases,dtype='string'),return_counts=True)
@@ -113,7 +116,7 @@ def main():
     3. write out base count lines.
     """
     programnam = sys.argv[0]
-    bamfile, qualThresh, ref, depth, threads = getOption()
+    bamfile, qualThresh, ref, depth, threads, skipBases = getOption()
     refFasta = pysam.Fastafile(ref) 
     index = bamfile + '.bai'
     if os.path.exists(index):
@@ -131,7 +134,7 @@ def main():
                                     max_depth=depth):
             position = pileupColumn.pos
             refBase = refFasta.fetch(refName,position, position+1)
-            analyzePosition(pileupColumn, refBase, threads, position, qualThresh)
+            analyzePosition(pileupColumn, refBase, threads, position, qualThresh, skipBases)
             if position % 10 == 0:
                 sys.stderr.write('[%s] Piled up %s: %i \n' %(programnam,refName,position))
     sys.stderr.write('[%s] Finished extracting %s.\n' %(programnam,bamfile))

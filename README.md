@@ -46,3 +46,28 @@ optional arguments:
   -n, --retainN         Use N-containing sequence for concensus base vote and
                         output sequences containing N (defulat: False)
 ```
+
+### pileupBam.py
+```
+usage: pileupBamToBase.py [-h] -i BAMFILE [-q QUALTHRESH] -r REFFASTA
+                          [-d DEPTH] [-p THREADS] [-s SKIPBASES]
+
+Pile up bam file and get mapped bases (excluded clipped bases and low quality
+base).
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -i BAMFILE, --bamfile BAMFILE
+                        position sorted bam file
+  -q QUALTHRESH, --qualThresh QUALTHRESH
+                        Base calling quality threshold (default: 33)
+  -r REFFASTA, --refFasta REFFASTA
+                        reference fasta
+  -d DEPTH, --depth DEPTH
+                        Maximum depth (default: 8000)
+  -p THREADS, --threads THREADS
+                        Threads to used (default: 1)
+  -s SKIPBASES, --skipBases SKIPBASES
+                        Bases at the end positions that will not be evaluated
+                        (default: 3)
+```
