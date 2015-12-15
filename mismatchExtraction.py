@@ -63,7 +63,6 @@ def pileup(bamFile, outputPath, samplename, threads):
     depth = 30000000
     bampath = outputPath + '/bamFile'
     mismatchFile = '%s/mismatchData/%s.tsv' %(outputPath,samplename)
-    print samplename
     qualThresh = 33
     ref = index
     skipBases = 3
