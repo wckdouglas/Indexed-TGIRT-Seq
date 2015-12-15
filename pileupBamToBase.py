@@ -26,6 +26,8 @@ def getOption():
             default = 1, help='Threads to used (default: 1)')
     parser.add_argument('-s','--skipBases', type=int,  
             default = 3, help='Bases at the end positions that will not be evaluated (default: 3)')
+    parser.add_argument('-o','--output', type = argparse.FileType('w'),  
+            default = sys.stdout, help='Output file')
     args = parser.parse_args()
     bamfile = args.bamfile
     qualThresh = args.qualThresh
@@ -33,9 +35,10 @@ def getOption():
     depth =  args.depth
     threads =  args.threads
     skipBases = args.skipBases
-    return bamfile, qualThresh, refFasta, depth, threads, skipBases
+    outFile = args.output
+    return bamfile, qualThresh, refFasta, depth, threads, skipBases, outFile
     
-def printLine(referenceBase, bases, count , position, coverage):
+def printLine(referenceBase, bases, count , position, coverage, outFile):
     """
     for each column position (pileup column), output the 
     1. position on the chromosome
@@ -53,7 +56,7 @@ def printLine(referenceBase, bases, count , position, coverage):
     line = str(position) +'\t' + referenceBase  + '\t' + str(coverage)
     for base in regularBase:
         line += '\t' + str(baseDict[base])
-    print line
+    outFile.write(line+'\n')
     return 0
 
 def cigarToSeq(cigar):
@@ -87,7 +90,7 @@ def extractBase(sequence, quality, cigar, matchPos, qualThresh, bases, skipBases
             bases.append(base)
     return 0
 
-def analyzePosition(pileupColumn, refBase, threads, position, qualThresh, skipBases):
+def analyzePosition(pileupColumn, refBase, threads, position, qualThresh, skipBases, outFile):
     """
     for each pileup position, extracted all alignments using pysam
     processing each alignment is computationally heavy.
@@ -101,14 +104,14 @@ def analyzePosition(pileupColumn, refBase, threads, position, qualThresh, skipBa
     pool.close()
     pool.join()
     bases, count = np.unique(np.array(posbases,dtype='string'),return_counts=True)
-    printLine(refBase, bases, count, position, cov) 
+    printLine(refBase, bases, count, position, cov, outFile) 
     return 0
 
-def printHeader():
-    print 'refpos\trefBase\tcoverage\tA\tT\tC\tG'
+def printHeader(outfile):
+    outfile.write('refpos\trefBase\tcoverage\tA\tT\tC\tG\n')
     return 0
 
-def main():
+def main(bamfile, qualThresh, ref, depth, threads, skipBases, outFile): 
     """
     Using pysam to pileup bam file
     1. extract aligned reads at each position
@@ -116,7 +119,6 @@ def main():
     3. write out base count lines.
     """
     programnam = sys.argv[0]
-    bamfile, qualThresh, ref, depth, threads, skipBases = getOption()
     refFasta = pysam.Fastafile(ref) 
     index = bamfile + '.bai'
     if os.path.exists(index):
@@ -128,17 +130,18 @@ def main():
         sys.stderr.write('[%s] Pileup BAM file: %s \n' %(programnam,bamfile))
         refName = bam.references[0]
         refLength = int(bam.lengths[0])
-        printHeader()
+        printHeader(outFile)
         for pileupColumn in bam.pileup(refName,
                                     fastafile=refFasta,
                                     max_depth=depth):
             position = pileupColumn.pos
             refBase = refFasta.fetch(refName,position, position+1)
-            analyzePosition(pileupColumn, refBase, threads, position, qualThresh, skipBases)
+            analyzePosition(pileupColumn, refBase, threads, position, qualThresh, skipBases, outFile)
             if position % 10 == 0:
                 sys.stderr.write('[%s] Piled up %s: %i \n' %(programnam,refName,position))
     sys.stderr.write('[%s] Finished extracting %s.\n' %(programnam,bamfile))
     return 0
         
 if __name__ == '__main__':
-    main()
+    bamfile, qualThresh, ref, depth, threads, skipBases, outFile = getOption()
+    main(bamfile, qualThresh, ref, depth, threads, skipBases, outFile)

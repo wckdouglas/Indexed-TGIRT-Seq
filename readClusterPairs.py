@@ -81,8 +81,7 @@ def getOptions():
     printScore = args.printScore
     barcodeCutOff = args.barcodeCutOff
     voteCutOff = args.voteCutOff
-    return outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, \
-            retainN, barcodeCutOff,  voteCutOff, printScore
+    return outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, retainN, barcodeCutOff,  voteCutOff, printScore
 
 def calculateConcensusBase(arg):
     """Given a list of sequences, 
@@ -255,7 +254,8 @@ def clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, m
     stderr.write('[%s]     output clusters:  %i\n' %(programname, len(left)))
     return 0
 
-def main():
+def main(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount,
+            retainN, barcodeCutOff, voteCutOff, printScore):
     """
     main function:
         controlling work flow
@@ -263,8 +263,6 @@ def main():
         2. obtain concensus sequence from read clusters
         3. writing concensus sequence to files
     """
-    outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, \
-            retainN, barcodeCutOff, voteCutOff, printScore = getOptions()
     start = time.time()
 
     #print out parameters
@@ -296,4 +294,7 @@ def main():
     return 0
         
 if __name__ == '__main__':
-    main()
+    outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, \
+            retainN, barcodeCutOff, voteCutOff, printScore = getOptions()
+    main(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, 
+            retainN, barcodeCutOff, voteCutOff, printScore)
