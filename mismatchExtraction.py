@@ -49,8 +49,7 @@ def makeErrorFree(fq1, fq2, outputPath, samplename, threads):
     return 0
 
 def mapping(fq1, fq2, outputPath, samplename, threads):
-    bampath = outputPath + '/bamFile'
-    bamFile = '%s/%s.bam ' %(bampath, samplename)
+    bamFile = '%s/bamFile/%s.bam ' %(outputPath, samplename)
     command = 'bwa mem -t %i ' %(threads)   +\
            '%s %s %s ' %(index ,fq1, fq2)+\
            '| samtools view -b@ %i -F 4 -F 256 -F 2048 -' %(threads) +\
@@ -61,13 +60,12 @@ def mapping(fq1, fq2, outputPath, samplename, threads):
 
 def pileup(bamFile, outputPath, samplename, threads):
     depth = 30000000
-    bampath = outputPath + '/bamFile'
     mismatchFile = '%s/mismatchData/%s.tsv' %(outputPath,samplename)
     qualThresh = 33
     ref = index
     skipBases = 3
     outFile = open(mismatchFile, 'w')
-    pileupBamToBase.main(bamfile, qualThresh, ref, depth, threads, skipBases, outFile)
+    pileupBamToBase.main(bamFile, qualThresh, ref, depth, threads, skipBases, outFile)
     return mismatchFile
 
 def makedirs(dir):
