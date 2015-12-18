@@ -35,8 +35,8 @@ def runCommand(command, samplename):
     return 0
 
 
-def makeErrorFree(fq1, fq2, outputPath, samplename, threads):
-    outputprefix = '%s/rawData/%s-ErrorFree' %(outputPath, samplename)
+def makeErrorFree(fq1, fq2, outputPath, samplename, threads, tag):
+    outputprefix = '%s/rawData/%s%s' %(outputPath, samplename,tag)
     inFastq1 = fq1
     inFastq2 = fq2
     idxBase = 13
@@ -45,7 +45,7 @@ def makeErrorFree(fq1, fq2, outputPath, samplename, threads):
     barcodeCutOff = 30
     voteCutOff = 0.9
     printScore = False
-    readClusterPairsmain(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, retainN, barcodeCutOff, voteCutOff, printScore)
+    readClusterPairs.main(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, retainN, barcodeCutOff, voteCutOff, printScore)
     return 0
 
 def mapping(fq1, fq2, outputPath, samplename, threads):
@@ -53,14 +53,14 @@ def mapping(fq1, fq2, outputPath, samplename, threads):
     command = 'bwa mem -t %i ' %(threads)   +\
            '%s %s %s ' %(index ,fq1, fq2)+\
            '| samtools view -b@ %i -F 4 -F 256 -F 2048 -' %(threads) +\
-           '| samtools sort -@ %i -O bam -T %s/%s - ' %(threads, bampath, samplename) + \
+           '| samtools sort -@ %i -O bam -T %s/bamFile/%s - ' %(threads, outputPath, samplename) + \
            '> %s' %(bamFile)
     runCommand(command, samplename)
     return bamFile
 
 def pileup(bamFile, outputPath, samplename, threads):
-    depth = 30000000
     mismatchFile = '%s/mismatchData/%s.tsv' %(outputPath,samplename)
+    depth = 30000000
     qualThresh = 33
     ref = index
     skipBases = 3
@@ -80,9 +80,10 @@ def main():
     folders = ['bamFile','mismatchData','rawData']
     [makedirs(outputPath + '/' + folder) for folder in folders]
     samplename = os.path.basename(fq1).split('_')[0]
-    makeErrorFree(fq1,fq2,outputPath, samplename, threads)
-    newfq1 = '%s/rawData/%s-ErrorFree_R1_001.fastq.gz' %(outputPath,samplename)
-    newfq2 = '%s/rawData/%s-ErrorFree_R2_001.fastq.gz' %(outputPath,samplename)
+    tag = '-ErrorFree'
+    makeErrorFree(fq1,fq2,outputPath, samplename, threads, tag)
+    newfq1 = '%s/rawData/%s%s_R1_001.fastq.gz' %(outputPath,samplename, tag)
+    newfq2 = '%s/rawData/%s%s_R2_001.fastq.gz' %(outputPath,samplename, tag)
     newsamplename = newfq1.split('/')[-1].split('_')[0]
     bamFiles = [mapping(f1, f2, outputPath, name, threads) for f1, f2, name in zip([fq1,newfq1], [fq2,newfq2], [samplename,newsamplename])]
     mismatchFiles = [pileup(bamFile, outputPath, name, threads) for bamFile, name in zip(bamFiles, [samplename, newsamplename])]

@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Must be before importing matplotlib.pyplot or pylab
 import matplotlib.pylab as plt
+import seaborn as sns
 import sys
 import argparse
 import glob
@@ -16,6 +17,7 @@ import time
 from os import path
 import os
 
+sns.set_style('white')
 programname = path.basename(sys.argv[0]).split('.')[0]
 
 #    ==================      Sequence class sotring left right record =============
@@ -168,7 +170,7 @@ def errorFreeReads(readCluster, index, counter, lock, minReadCount,
             if clusterCount % 100000 == 0:
                 stderr.write('[%s] Processed %i read clusters.\n' %(programname,clusterCount))
             lock.release()
-            results.append(leftRecord,rightRecord)
+            results.append((leftRecord,rightRecord))
 
 def readClustering(args):
     """
@@ -206,15 +208,17 @@ def writeFile(outputprefix, leftReads, rightReads):
 def plotBCdistribution(barcodeDict, outputprefix):
     #plotting inspection of barcode distribution
     barcodeCount = np.array([record.readCounts() for record in barcodeDict.values()],dtype='int64')
-    figurename = '%s.png' %(outputprefix)
     hist, bins = np.histogram(barcodeCount[barcodeCount<50],50)
     centers = (bins[:-1] + bins[1:]) / 2
     width = 0.7 * (bins[1] - bins[0])
+    figurename = '%s.png' %(outputprefix)
     fig = plt.figure()
-    plt.bar(centers,hist,align='center',width=width)
-    plt.xlabel("Number of occurence")
-    plt.ylabel("Count of tags")
-    plt.yscale('log',nonposy='clip')
+    ax = fig.add_subplot(111)
+    ax.bar(centers,hist,align='center',width=width)
+    ax.set_xlabel("Number of occurence")
+    ax.set_ylabel("Count of tags")
+    ax.set_yscale('log',nonposy='clip')
+    ax.set_title(outputprefix.split('/')[-1])
     fig.savefig(figurename)
     stderr.write('Plotted %s.\n' %figurename)
     return 0
