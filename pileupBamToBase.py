@@ -99,7 +99,7 @@ def analyzePosition(pileupColumn, refBase, threads, position, qualThresh, skipBa
     cov = pileupColumn.n
     posbases = Manager().list([])
     pool = Pool(processes=threads)
-    [pool.apply(extractBase, (aln.alignment.seq, aln.alignment.qual, aln.alignment.cigarstring, aln.query_position,
+    [pool.apply_async(extractBase, (aln.alignment.seq, aln.alignment.qual, aln.alignment.cigarstring, aln.query_position,
                         qualThresh, posbases, skipBases)) for aln in pileupColumn.pileups if (not aln.alignment.is_secondary and aln.indel==0)]
     pool.close()
     pool.join()

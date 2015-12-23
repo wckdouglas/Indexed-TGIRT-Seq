@@ -7,7 +7,7 @@ from multiprocessing import Pool, Manager, Process
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Must be before importing matplotlib.pyplot or pylab
-import matplotlib.pylab as plt
+import matplotlib.pyplot as plt
 import seaborn as sns
 import sys
 import argparse
@@ -237,7 +237,7 @@ def clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, m
     lock = Manager().Lock()
     results = Manager().list([])
     pool = Pool(processes=threads)
-    [pool.apply(errorFreeReads, (barcodeDict[index],index, counter, lock, 
+    [pool.apply_async(errorFreeReads, (barcodeDict[index],index, counter, lock, 
                         minReadCount, retainN,  voteCutOff, printScore, results)) \
                 for index in barcodeDict.keys()]
     pool.close()
