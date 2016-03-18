@@ -9,6 +9,7 @@ import time
 import os
 import pileupBamToBase
 import readClusterPairs
+import basePosExtraction
 
 index= '/corral-repl/utexas/2013lambowitz/Ref/syntheticOligos/celSpikeinLong/spikein.fa'
 programname = sys.argv[0]
@@ -68,6 +69,17 @@ def pileup(bamFile, outputPath, samplename, threads):
     pileupBamToBase.main(bamFile, qualThresh, ref, depth, threads, skipBases, outFile)
     return mismatchFile
 
+def extractBase(bamFile, outputPath, samplename):
+    mismatchFile = '%s/mismatchData/%s.tsv' %(outputPath,samplename)
+    refFa = index
+    lenCut = 3
+    qualThresh = 33
+    indel = False
+    outFile = open(mismatchFile, 'w')
+    pileupBamToBase.main(bamFile, qualThresh, ref, depth, threads, skipBases, outFile)
+    basePosExtraction.main(bamFile, refFa, qualThresh, lenCut, indel, 'basePosExtraction')
+    return mismatchFile
+
 def makedirs(dir):
     if not os.path.isdir(dir):
         os.mkdir(dir)
@@ -87,6 +99,7 @@ def main():
     newsamplename = newfq1.split('/')[-1].split('_')[0]
     bamFiles = [mapping(f1, f2, outputPath, name, threads) for f1, f2, name in zip([fq1,newfq1], [fq2,newfq2], [samplename,newsamplename])]
     mismatchFiles = [pileup(bamFile, outputPath, name, threads) for bamFile, name in zip(bamFiles, [samplename, newsamplename])]
+    mismatchFiles = [extractBase(bamFile, outputPath, name) for bamFile, name in zip(bamFiles, [samplename, newsamplename])]
     #bamFile = mapping(newfq1, newfq2, outputPath, newsamplename) 
     #mismatchFiles = pileup(bamFile, outputPath, newsamplename) 
     return 0

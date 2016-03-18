@@ -57,7 +57,8 @@ def MDToSeq(mdtag):
         mdSeq += string
     return mdSeq
 
-def processAln(aln, misMat, tTable, qualThresh, lenCut, refSeq):
+def processAln(aln, misMat, tTable, qualThresh, lenCut, refSeq, headCut1, tailCut1, headCut2, tailCut2):
+    passed = 1
     startpos = aln.pos
     sequence = aln.seq
     MDtag = [tag[1] for tag in aln.tags if tag[0] == 'MD'][0]
@@ -76,7 +77,7 @@ def processAln(aln, misMat, tTable, qualThresh, lenCut, refSeq):
     length = len(newSeq)
     pos = np.arange(len(newSeq))
     for b, m, c, q, p in zip(newSeq, mdSeq, newCigar, newQual, pos):
-        if q > qualThresh and c == 'M' and p > lenCut and p < length - lenCut and ((tailClipped < 3 and aln.is_read2 and headClipped == 0 ) or (headClipped == 13 and tailClipped == 0 and aln.is_read1)):
+        if q > qualThresh and c == 'M' and p > lenCut and p < (length - lenCut) and ((tailClipped < tailCut2 and aln.is_read2 and headClipped == headCut2 ) or (headClipped == headCut1 and tailClipped < tailCut1 and aln.is_read1)):
             position = startpos + p
             assert m != b, '\nread: '+ m +\
                            '\n ref: ' + b +\
@@ -88,24 +89,30 @@ def processAln(aln, misMat, tTable, qualThresh, lenCut, refSeq):
 #            refBase = str(refSeq[position])
 #            assert (m == '-' and b == refBase) or (m != '-' and m == refBase), 'Wrong interpretation of refbase and md'
             misMat[position,tTable[b]] += 1
-    return misMat
+            passed = 0
+    return passed
 
-def parseRegion(refID, bam, misMat, tTable, qualThresh, lenCut, refSeq, indel):
+def parseRegion(refID, bam, misMat, tTable, qualThresh, lenCut, refSeq, indel, headCut1, tailCut1, headCut2, tailCut2):
     count = 0
+#    outBam = ''
+#    out = pysam.Samfile(outBam, 'wb',template=bam)
     for aln in bam.fetch(refID) :
         if (not indel and not any(np.in1d(['I','D'],list(aln.cigarstring)))) or (indel):
-            processAln(aln, misMat, tTable, qualThresh, lenCut, refSeq)
+            passed = processAln(aln, misMat, tTable, qualThresh, lenCut, refSeq, headCut1, tailCut1, headCut2, tailCut2)
+ #           if passed == 0:
+ #               out.write(aln)
         count += 1
         if count % 100000 == 0:
             sys.stderr.write('[%s] Processed %i alignments in %s\n' %(programname,count, refID))
     rownum = 0
+    out.close()
     for row in misMat:
         print '\t'.join([refID, str(rownum), str(refSeq[rownum]), str(sum(row)) ,'\t'.join(map(str,row))])
         rownum += 1
     return 0
 
 
-def main(inBam, refFa, qualThresh, lenCut, indel, programname):
+def main(inBam, refFa, qualThresh, lenCut, indel, programname, headCut1, tailCut1, headCut2, tailCut2):
     sys.stderr.write('[%s] Starting %s\n' %(programname, inBam))
     print 'refID\trefPos\trefBase\tcoverage\tA\tC\tT\tG'
     indexing =  pysam.index(inBam)
@@ -115,7 +122,7 @@ def main(inBam, refFa, qualThresh, lenCut, indel, programname):
         for refID, refsize in zip(refnames, refsizes):
             misMat, tTable = mismatchMatrix(refsize)
             refSeq = fa[refID]
-            parseRegion(refID, bam, misMat, tTable, qualThresh, lenCut, refSeq, indel)
+            parseRegion(refID, bam, misMat, tTable, qualThresh, lenCut, refSeq, indel, headCut1, tailCut1, headCut2, tailCut2)
             sys.stderr.write('[%s] Parsed %s in %s\n' %(programname, refID, inBam))
     sys.stderr.write('[%s] Finished parsing %s\n' %(programname, inBam))
     return 0
@@ -128,6 +135,10 @@ if __name__=='__main__':
     parser.add_argument('-q','--qual',default=33, type = int, help='BAQ threshold (default: 33)')
     parser.add_argument('-s','--skip',default=3, type = int,  help='Skipping n bases from head and tail (default: 3)')
     parser.add_argument('-d','--indel', action='store_true', help='Allow indel alignments')
+    parser.add_argument('-a','--h1', default = 0, type = int, help="Need extact n softclipped base on read1 5' (default: 0)")
+    parser.add_argument('-b','--h2', default = 0, type = int, help="Need extact n softclipped base on read2 5' (default: 0)")
+    parser.add_argument('-y','--t1', default = 0, type = int, help="Allow n softclipped base on read1 3' (defualt: 0)")
+    parser.add_argument('-z','--t2', default = 0, type = int, help="Allow n softclipped base on read2 3' (default: 0)")
     args = parser.parse_args()
     args = parser.parse_args()
     inBam =  args.inBam
@@ -135,4 +146,8 @@ if __name__=='__main__':
     lenCut = args.skip
     refFa = args.refFasta
     indel = args.indel
-    main(inBam, refFa, qualThresh, lenCut, indel, programname)
+    tailCut1 = args.t1
+    tailCut2 = args.t2
+    headCut1 = args.h1
+    headCut2 = args.h2
+    main(inBam, refFa, qualThresh, lenCut, indel, programname, headCut1, tailCut1, headCut2, tailCut2)
