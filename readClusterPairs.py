@@ -14,22 +14,23 @@ import gzip
 import time
 import os
 from itertools import izip
+from multiprocessing import Pool, Manager
 sns.set_style('white')
 programname = os.path.basename(sys.argv[0]).split('.')[0]
 
 #    ==================      Sequence class sotring left right record =============
 class seqRecord:
     def __init__(self):
-        self.seqListRight = np.array([],dtype='string')
-        self.qualListRight = np.array([],dtype='string')
-        self.seqListLeft = np.array([],dtype='string')
-        self.qualListLeft = np.array([],dtype='string')
+        self.seqListRight = [] 
+        self.qualListRight = [] 
+        self.seqListLeft = [] 
+        self.qualListLeft = []
 
     def addRecord(self, seqRight, qualRight, seqLeft, qualLeft):
-        self.seqListRight = np.append(self.seqListRight,seqRight)
-        self.qualListRight = np.append(self.qualListRight,qualRight)
-        self.seqListLeft = np.append(self.seqListLeft,seqLeft)
-        self.qualListLeft = np.append(self.qualListLeft,qualLeft)
+        self.seqListRight.append(seqRight)
+        self.qualListRight.append(qualRight)
+        self.seqListLeft.append(seqLeft)
+        self.qualListLeft.append(qualLeft)
 
     def readCounts(self):
         assert len(self.seqListLeft) == len(self.seqListRight), 'Not equal pairs'
@@ -152,8 +153,7 @@ def selectSeqLength(readLengthArray):
     seqlength, count = np.unique(readLengthArray, return_counts=True)
     return seqlength[count==max(count)][0]
 
-def errorFreeReads(readCluster, index, counter, minReadCount, 
-        retainN):
+def errorFreeReads(args):
     """
     main function for getting concensus sequences from read clusters.
     return  a pair of concensus reads with a 4-line fastq format
@@ -164,17 +164,20 @@ def errorFreeReads(readCluster, index, counter, minReadCount,
     #if readCluster.readCounts() > minReadCount:
     #    reads = filterRead(readCluster)
     # skip if not enough sequences to perform voting
+    readCluster, index, counter, minReadCount, retainN = args
     if readCluster is not None and readCluster.readCounts() > minReadCount:
         sequenceLeft, qualityLeft, supportedLeftReads, \
         sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster)
         if (retainN == False and 'N' not in sequenceRight and 'N' not in sequenceLeft) or (retainN == True and set(sequenceLeft)!={'N'}):
-            counter += 1
+            count = counter.value
+            count += 1
             leftRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
-                %(counter, index, supportedLeftReads, sequenceLeft, qualityLeft)
+                %(count, index, supportedLeftReads, sequenceLeft, qualityLeft)
             rightRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
-                %(counter, index, supportedRightReads, sequenceRight, qualityRight)
-            if counter % 100000 == 0:
-                stderr.write('[%s] Processed %i read clusters.\n' %(programname, counter))
+                %(count, index, supportedRightReads, sequenceRight, qualityRight)
+            if count % 100000 == 0:
+                stderr.write('[%s] Processed %i read clusters.\n' %(programname, count))
+            counter.value = count
             return(leftRecord,rightRecord)
 
 def readClustering(args):
@@ -192,8 +195,9 @@ def readClustering(args):
     not any(pattern in barcode for pattern in ['AAAA','CCCC','TTTT','GGGG']) and \
     ((retainedN==False and 'N' not in seqLeft and 'N' not in seqRight) or retainedN==True): #and seqLeft[idxBase:(idxBase+6)] == 'TTTTGA':
         seqLeft = seqLeft[idxBase:]
-        barcodeDict.setdefault(barcode,seqRecord()) 
-        barcodeDict[barcode].addRecord(seqRight, qualRight, seqLeft, qualLeft)
+        record = barcodeDict.get(barcode,seqRecord()) 
+        record.addRecord(seqRight, qualRight, seqLeft, qualLeft)
+        barcodeDict[barcode] = record
     return 0
 
 def writeFile(outputprefix, leftReads, rightReads):
@@ -232,16 +236,20 @@ def plotBCdistribution(barcodeDict, outputprefix):
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
          retainN, barcodeCutOff):
-    barcodeDict = {}
+    threads = 24
+    manager = Manager()
+    barcodeDict = manager.dict({})
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
-        map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN) for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
+        pool = Pool(threads)
+        pool.map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN) for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
     stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
     plotBCdistribution(barcodeDict, outputprefix)
 
     # From index library, generate error free reads
     # using multicore to process read clusters
-    counter = 0
-    results = [errorFreeReads(barcodeDict[index], index, counter, minReadCount, retainN) for index in barcodeDict.keys()]
+    counter = manager.Value('i',0)
+    results = Pool(threads).map(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, retainN)\
+            for index in barcodeDict.keys()])
     results = filter(None,  results)
     # since some cluster that do not have sufficient reads
     # will return None, results need to be filtered
