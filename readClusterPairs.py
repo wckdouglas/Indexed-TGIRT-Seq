@@ -61,8 +61,6 @@ def getOptions():
         help="how many base in 5' end as index? (default: 13)")
     parser.add_argument('-q', '--barcodeCutOff', type=int, default=30,
         help="Average base calling quality for barcode sequence (default=30)")
-    parser.add_argument('-v', '--printScore', action = 'store_true',
-            help="Printing score for each base to stdout (default: False)")
     parser.add_argument("-n", "--retainN", action='store_true',
         help="Use N-containing sequence for concensus base vote and output sequences containing N (defulat: False)")
     args = parser.parse_args()
@@ -72,9 +70,8 @@ def getOptions():
     idxBase = args.idxBase
     minReadCount = args.cutoff
     retainN = args.retainN
-    printScore = args.printScore
     barcodeCutOff = args.barcodeCutOff
-    return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, printScore
+    return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff
 
 def qual2Prob(q):
     ''' 
@@ -101,7 +98,7 @@ def calculateConcensusBase(arg):
     return the maximum likelihood base at the given position,
         along with the mean quality of these concensus bases.
     """
-    seqList, qualList, pos, printScore = arg
+    seqList, qualList, pos = arg
     no_of_reads = len(seqList)
     acceptable_bases = np.array(['A','C','T','G'], dtype='string')
     columnBases = np.empty(no_of_reads,dtype='string')
@@ -118,19 +115,19 @@ def calculateConcensusBase(arg):
     quality = quality if quality <= 93 else 93
     return concensusBase, quality
 
-def concensusSeq(seqList, qualList, positions, printScore):
+def concensusSeq(seqList, qualList, positions):
     """given a list of sequences, a list of quality and sequence length. 
         assertion: all seq in seqlist should have same length (see function: selectSeqLength)
     return a consensus sequence and the mean quality line (see function: calculateConcensusBase)
     """
-    concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos, printScore) for pos in positions])
+    concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos) for pos in positions])
     bases, quals = zip(*concensusPosition)
     sequence = ''.join(list(bases))
     quality = ''.join([chr(int(q)) for q in list(quals)])
     return sequence, quality
 
 
-def concensusPairs(reads, printScore):
+def concensusPairs(reads):
     """ given a pair of reads as defined as the class: seqRecord
     return concensus sequence and mean quality of the pairs, 
         as well as the number of reads that supports the concnesus pairs
@@ -158,7 +155,7 @@ def selectSeqLength(readLengthArray):
     return seqlength[count==max(count)][0]
 
 def errorFreeReads(readCluster, index, counter, minReadCount, 
-        retainN, printScore):
+        retainN):
     """
     main function for getting concensus sequences from read clusters.
     return  a pair of concensus reads with a 4-line fastq format
@@ -171,7 +168,7 @@ def errorFreeReads(readCluster, index, counter, minReadCount,
     # skip if not enough sequences to perform voting
     if readCluster is not None and readCluster.readCounts() > minReadCount:
         sequenceLeft, qualityLeft, supportedLeftReads, \
-        sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster, printScore)
+        sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster)
         if (retainN == False and 'N' not in sequenceRight and 'N' not in sequenceLeft) or (retainN == True and set(sequenceLeft)!={'N'}):
             counter += 1
             leftRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
@@ -236,7 +233,7 @@ def plotBCdistribution(barcodeDict, outputprefix):
     return 0
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
-         retainN, barcodeCutOff, printScore):
+         retainN, barcodeCutOff):
     barcodeDict = {}
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN) for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
@@ -246,7 +243,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = 0
-    results = [errorFreeReads(barcodeDict[index], index, counter, minReadCount, retainN, printScore) for index in barcodeDict.keys()]
+    results = [errorFreeReads(barcodeDict[index], index, counter, minReadCount, retainN) for index in barcodeDict.keys()]
     results = filter(None,  results)
     # since some cluster that do not have sufficient reads
     # will return None, results need to be filtered
@@ -265,7 +262,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     return 0
 
 def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
-            retainN, barcodeCutOff, printScore):
+            retainN, barcodeCutOff):
     """
     main function:
         controlling work flow
@@ -284,7 +281,7 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     
     # divide reads into subclusters
     clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
-                                retainN, barcodeCutOff, printScore)
+                                retainN, barcodeCutOff)
     stderr.write('[%s]     time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
         
