@@ -10,7 +10,7 @@ import os
 import pileupBamToBase
 import readClusterPairs
 
-index= '/corral-repl/utexas/2013lambowitz/Ref/syntheticOligos/celSpikeinLong/spikein.fa'
+index= '/scratch/cdw2854/plasmaDNA/reference/spikein.fa'
 programname = sys.argv[0]
 
 def getOpt():
@@ -49,13 +49,13 @@ def makeErrorFree(fq1, fq2, outputPath, samplename, threads, tag):
     return 0
 
 def mapping(fq1, fq2, outputPath, samplename, threads):
-    bamFile = '%s/bamFile/%s.bam ' %(outputPath, samplename)
+    bamFile = '%s/bamFile/%s.bam' %(outputPath, samplename)
     command = 'bwa mem -t %i ' %(threads)   +\
            '%s %s %s ' %(index ,fq1, fq2)+\
            '| samtools view -b@ %i -F 4 -F 256 -F 2048 -' %(threads) +\
            '| samtools sort -@ %i -O bam -T %s/bamFile/%s - ' %(threads, outputPath, samplename) + \
            '> %s' %(bamFile)
-    runCommand(command, samplename)
+    #runCommand(command, samplename)
     return bamFile
 
 def pileup(bamFile, outputPath, samplename, threads):
@@ -81,7 +81,7 @@ def main():
     [makedirs(outputPath + '/' + folder) for folder in folders]
     samplename = os.path.basename(fq1).split('_')[0]
     tag = '-ErrorFree'
-    makeErrorFree(fq1,fq2,outputPath, samplename, threads, tag)
+    #makeErrorFree(fq1,fq2,outputPath, samplename, threads, tag)
     newfq1 = '%s/rawData/%s%s_R1_001.fastq.gz' %(outputPath,samplename, tag)
     newfq2 = '%s/rawData/%s%s_R2_001.fastq.gz' %(outputPath,samplename, tag)
     newsamplename = newfq1.split('/')[-1].split('_')[0]

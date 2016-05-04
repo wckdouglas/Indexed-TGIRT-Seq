@@ -1,8 +1,8 @@
 #!/bin/bash
 
-PROJECTPATH=/scratch/02727/cdw2854/TGIRT_plasma_dna/syntheticOligo
+PROJECTPATH=/scratch/cdw2854/tgirtDNA
 DATAPATH=$PROJECTPATH/rawData
-THREADS=12
+THREADS=24
 
 for FQ1 in $DATAPATH/*R1_001.fastq.gz
 do
@@ -13,4 +13,3 @@ do
         --outputPath=$PROJECTPATH \
         --threads=$THREADS
 done | grep -v 'Error\|try'
-
