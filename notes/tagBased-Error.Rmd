@@ -1,13 +1,13 @@
 ---
 title: "Tag-based Error correction"
 author: "Dougals Wu"
-date: "December 1, 2015"
+date: "May 4, 2015"
 output: html_document
 ---
 
-This is a note for myself on the tag-based error correction program that I coded up. 
+This is a note for myself on the tag-based error correction program that I coded up (Figure 1). This is inspired from a combination of two works, [circ-seq](http://www.ncbi.nlm.nih.gov/pubmed/24243955) and [safe-seq](http://www.pnas.org/content/108/23/9530).
 
-# Grouping
+# Grouping #
 
 For a given read 1, the first 13 bases is the index as below.
 
@@ -18,114 +18,67 @@ For a given read 1, the first 13 bases is the index as below.
 Reads with same index are grouped together in a dictionary (python).
 
 
-# Concensus base
+# Concensus base #
 
-For a cluster of reads (group), bases at a single position were extracted, concensus base was predicted using maximum likelihood.
-
-For a give position, assume the bases A, C, T, G are observed $j, k, l, m$ times respectively.  The likelihood of the concensus base is A would be computed as:
+For a cluster of reads (group), bases at a single position (a column) were extracted, concensus base was predicted using maximum likelihood with priors as Phred quality scores (Q):
 
 \[
-L(base = A|jA, kC, lT, mG) = P(jA, kC, lT, mG|base=A) = \prod_{b_i \in (\text{all bases})}P(b_i|base=A)
+Q = -10 log_{10} P
+\]
+\[
+P = 10 ^{\frac{-Q}{10}}
+\]
+where p is the error probability.
+
+For a give position in the read cluster $J$, read $i$, likelihood of identity of the concensus base ($I$) being $b$ given output base ($r$): 
+\[ P(I=b | r_{i, j},Q_{i,j}) \propto \left\{ \begin{array}{cl}
+         1 - 10^\frac{-Q_{i,j}}{10} & \mbox{if $r_{i,j} = b$};\\
+        10^\frac{-Q_{i,j}}{10} & \mbox{if $r_{i,j} \neq b$}.\end{array} \right.
 \]
 
 \[
-P(jA, kC, lT, mG|base=A) = P(A|base=A)^{j} \times P(C|base=A)^{k} \times P(T|base=A)^{l} \times P(G|base=A)^{m}
+P(I=b | r_{j},Q_{j}) = \frac{\prod_i (P(I=b|r_{j},Q_{j}))}{\sum_{d \in \{A,C,T,G\}}\prod_i (P(I=d|r_{j},Q_{j}))}
 \]
 
-Taking log would be computationally easier.
+For the following example illutrated with **R**, if a position in a read cluster contains bad sequencing reads [C, C, C, C, A, A, A, C] with Phred scores [54, 54, 54, 33, 80, 80, 80, 42]:
 
-\[
-log(L(base=A|jA, kC, lT, mG)) = log(P(jA, kC, lT, mG|base=A)) = \sum_{b\in{A,C,T,G}} (\text{# of b}) \times log(P(b|base=A))
-\]
-
-And sequencing error was estimated at 0.01.
-
-\[
-Log(L(base=A|jA, kC, lT, mG)) = j \times log(1-0.01) + (k+l+m)\times log(0.01)
-\]
-
-Log likelihood is calculated for all four base 
-
-\[
-log(\hat{\theta}) \in \{log(L(base=A|jA,kC,lT,mG)),log(L(base=T|jA,kC,lT,mG)),log(L(base=C|jA,kC,lT,mG)),log(L(base=G|jA,kC,lT,mG))\}
-\]
-
-let:
-
-* $\theta_{max}$ be $max(\log(\hat{\theta}))$     
-* $\hat{\theta}_{0}$ be $\hat{\theta}$ without $\theta_{max}$
-
-likelihood ratio test was performed by:
-\[
-log(\Lambda) = log(max(\hat{\theta})) - logsumexp(\hat{\theta}_{0})
-\]
-
-If the $log(\Lambda)$ is greater than some threshold, the concensus base is determined to be the base that has maximum likelihood.
-
-  
-
-# log likelihood ratio threshold
-
-For choosing log likelihood ratio threshold, it is important to normalize the log ratio by the coverage of the position. A set of simulated data with coverage $\in$ [4,60], was used to explore the range of loglik value (figure A). And mormalized log likelihood ratio from subsampled raw sequencing reads was also plotted below against the ratio of matched base in a given position (Figure B). This illustrate how a threshold can be chosen. (This test was done under the condition that sequence error = 0.01).
-
-```{r echo=F, message=F, warning=F}
-library(readr)
-library(dplyr)
+```{r warning = F, message = F }
 library(cowplot)
 
-simulate <- function(cov){
-    data_frame(cov = rep(cov,cov+1),
-               mismatch = 0:cov) %>%
-    mutate(matched = cov - mismatch) %>%
-    mutate(matchloglik = log(0.99) * matched + log(0.01) * mismatch) %>%
-    mutate(mismatchLoglik = log(0.01) * matched + log(0.99) * mismatch) %>%
-    mutate(ratio = matchloglik - mismatchLoglik) 
+q <- c(54, 54, 54, 33, 80, 80, 80, 42)
+b <- c('C', 'C', 'C', 'C', 'A', 'A', 'A', 'C')
+
+phred2prob <- function(q){
+  return (10 ^ (-q / 10))
 }
-coverage <- 4:60
-dt <- lapply(coverage,simulate) %>%
-    do.call(rbind,.) %>%
-    filter(matched>mismatch) %>%
-    mutate(loglik = ratio/cov) %>%
-    mutate(ratio = matched/cov) %>%
-    mutate(ratio = ifelse(ratio>0.9,'>0.9','<0.9'))
 
-p1 <- ggplot(data=dt, aes(y= loglik, x=cov)) +
-        geom_point(alpha=0.7,aes(color=ratio)) +
-        scale_x_continuous(breaks=seq(0,50,5)) +
-        scale_y_continuous(breaks=seq(0,5,0.5)) +
-#        scale_y_continuous(breaks=seq(0,5,0.5)) +
-#        theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
-#        geom_smooth(method='lm') +
-        geom_hline(y=3.8, color='green') +
-        scale_size_continuous(breaks=seq(0,300,50))+
- #       scale_color_gradient(high='red',low='yellow') +
-        labs(x='Coverage',y = 'Normalized log likelihood ratio', color='Correct base ratio', size = '# of events')
+getPosterior <- function(Ibase, b, q){
+  qHit <- q[b==Ibase]
+  qMiss <- q[b!=Ibase]
+  hitProb <- prod(1 - phred2prob(qHit))
+  missProb <- prod(phred2prob(qMiss)/3) 
+  return (hitProb * missProb)
+}
+
+bases <- c('A','T','C','G')
+posteriors <- sapply(bases, getPosterior, b, q)
+posteriorsDist <- posteriors/sum(posteriors)
+qplot(bases, posteriorsDist) + 
+  geom_bar(stat='identity') +
+  labs(x = ' hi', y = 'Posterior Probability')
+
 ```
 
-```{r echo=F, message=F, warning=F, fig.height=7}
-df <- read_csv('threshold.dat',col_names=c('loglik','cov','match'),col_type='nnn') %>%
-    filter(match!=0) %>%
-    mutate(ratio = match/cov) %>%
-    filter(loglik < 10) %>%
-    group_by(loglik, ratio,cov, match) %>%
-    summarize(count = n()) %>%
-    ungroup() %>%
-    mutate(ratio = ifelse(ratio>0.9,'>0.9','<0.9'))
-    
-p2 <- ggplot(data=df, aes(y= loglik, x=cov)) +
-        geom_point(alpha=0.7,aes(color=ratio,size=count)) +
-        scale_x_continuous(breaks=seq(0,50,5)) +
-        scale_y_continuous(breaks=seq(0,5,0.5)) +
-#        scale_y_continuous(breaks=seq(0,5,0.5)) +
-#        theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
-#        geom_smooth(method='lm') +
-        geom_hline(y=3.8, color='green') +
-        scale_size_continuous(breaks=seq(0,300,50))+
- #       scale_color_gradient(high='red',low='yellow') +
-        labs(x='Coverage',y = 'Normalized log likelihood ratio', color='Correct base ratio', size = '# of events')
-ggdraw() +
-    draw_plot(p1 + labs(y = ' ', x= ' '),0.02,0.5,0.98,0.48) +
-    draw_plot(p2 + labs(y=' '),0.02,0,0.98,0.48) +
-    draw_plot_label(c('A. Simulated Data','B. Subsampled Data'),c(0,0),c(1,0.5)) +
-    draw_plot_label( 'Normalized log likelihood ratio',0,0, angle=90)
+# Maximum likelihood #
+We will take the base with highest posterior probability as the concensus base, with a quality score (Q):
+\[
+Q = 10log_{10} (P(I=C | r_{j},Q_{j}))
+\]
+
+```{r, echo =F }
+Quality = - 10 * log10(1 - posteriorsDist[bases=='C'])
 ```
+
+In the above example, uncorrected quality score would be `r Quality`.
+
+![](/Users/wckdouglas/labWork/projects/plasmaDNA_project/manuscripts/figures/indexed_tgirt.pdf)
