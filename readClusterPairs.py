@@ -12,10 +12,10 @@ import argparse
 import glob
 import gzip
 import time
-from os import path
 import os
+from itertools import izip
 sns.set_style('white')
-programname = path.basename(sys.argv[0]).split('.')[0]
+programname = os.path.basename(sys.argv[0]).split('.')[0]
 
 #    ==================      Sequence class sotring left right record =============
 class seqRecord:
@@ -86,9 +86,12 @@ def qual2Prob(q):
 def calculatePosterior(guessBase, columnBases, qualities):
     qualHit = qualities[columnBases==guessBase]
     qualMissed = qualities[columnBases!=guessBase]
-    numerator = np.prod(1- qual2Prob(qualHit))
-    denominator = np.sum([numerator, np.prod(np.true_divide(qual2Prob(qualMissed),3))])
-    posterior = np.true_divide(numerator, denominator)
+    if len(qualMissed) > 0:
+        hit = np.prod(1- qual2Prob(qualHit)) if len(qualHit) > 0 else 0
+        missed = np.prod(np.true_divide(qual2Prob(qualMissed),3))
+        posterior = missed * hit
+    else: 
+        posterior = 1
     return posterior
 
 def calculateConcensusBase(arg):
@@ -107,9 +110,11 @@ def calculateConcensusBase(arg):
         columnBases[i] = seq[pos]
         qualities[i] = ord(qual[pos])
     posteriors = [calculatePosterior(guessBase, columnBases, qualities) for guessBase in acceptable_bases]
-    concensusBase = acceptable_bases[np.argmax(posteriors)]
-    # offset -33
-    quality = 10 * np.log10(1 - np.max(posteriors)) 
+    posteriors = np.true_divide(posteriors, np.sum(posteriors))
+    maxLikHood = np.argmax(posteriors)
+    concensusBase = acceptable_bases[maxLikHood]
+    posterior = posterior[maxLikHood]
+    quality = -10 * np.log10(1 - posterior) if posterior < 1 else 93
     quality = quality if quality <= 93 else 93
     return concensusBase, quality
 
@@ -213,7 +218,7 @@ def writeFile(outputprefix, leftReads, rightReads):
 def plotBCdistribution(barcodeDict, outputprefix):
     #plotting inspection of barcode distribution
     barcodeCount = np.array([record.readCounts() for record in barcodeDict.values()],dtype='int64')
-    hist, bins = np.histogram(barcodeCount[barcodeCount<50],50)
+    hist, bins = np.histogram(barcodeCount[barcodeCount<50],bins=50)
     centers = (bins[:-1] + bins[1:]) / 2
     width = 0.7 * (bins[1] - bins[0])
     figurename = '%s.png' %(outputprefix)
@@ -224,6 +229,8 @@ def plotBCdistribution(barcodeDict, outputprefix):
     ax.set_ylabel("Count of tags")
     ax.set_yscale('log',nonposy='clip')
     ax.set_title(outputprefix.split('/')[-1])
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
     fig.savefig(figurename)
     stderr.write('Plotted %s.\n' %figurename)
     return 0
@@ -270,7 +277,6 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
 
     #print out parameters
     stderr.write( '[%s] Using parameters: \n')
-    stderr.write( '[%s]     threads:                           %i\n' %(programname,threads))
     stderr.write( '[%s]     indexed bases:                     %i\n' %(programname,idxBase))
     stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,minReadCount))
     stderr.write( '[%s]     outputPrefix:                      %s\n' %(programname,outputprefix))
