@@ -110,7 +110,7 @@ def calculateConcensusBase(arg):
     posteriors = np.true_divide(posteriors, np.sum(posteriors))
     maxLikHood = np.argmax(posteriors)
     concensusBase = acceptable_bases[maxLikHood]
-    posterior = posterior[maxLikHood]
+    posterior = posteriors[maxLikHood]
     quality = -10 * np.log10(1 - posterior) if posterior < 1 else 93
     quality = quality if quality <= 93 else 93
     return concensusBase, quality
@@ -135,13 +135,11 @@ def concensusPairs(reads):
     """
     # get concensus left reads first
     sequenceLeft, qualityLeft = concensusSeq(reads.seqListLeft, reads.qualListLeft,  
-                                            range(np.unique(reads.readLengthLeft())[0]),  
-                                             printScore)
+                                            range(np.unique(reads.readLengthLeft())[0]))
     assert len(sequenceLeft) == len(qualityLeft), 'Wrong concensus sequence and quality!'
     # get concensus right reads first
     sequenceRight, qualityRight = concensusSeq(reads.seqListRight, reads.qualListRight,  
-                                                range(np.unique(reads.readLengthRight())[0]), 
-                                                 printScore)
+                                                range(np.unique(reads.readLengthRight())[0]))
     assert len(sequenceRight) == len(qualityRight), 'Wrong concensus sequence and quality!'
     return sequenceLeft, qualityLeft, len(reads.seqListLeft), \
             sequenceRight, qualityRight, len(reads.seqListRight)
