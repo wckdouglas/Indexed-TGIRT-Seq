@@ -286,7 +286,5 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     return 0
         
 if __name__ == '__main__':
-    outputprefix, inFastq1, inFastq2, idxBase, minReadCount, \
-            retainN, barcodeCutOff,  printScore = getOptions()
-    main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, 
-            retainN, barcodeCutOff,  printScore)
+    outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff = getOptions()
+    main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff)
