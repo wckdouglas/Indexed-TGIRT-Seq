@@ -6,7 +6,7 @@ from sys import stderr
 from multiprocessing import Pool, Manager, Process
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('Agg')  # Must be before importing matplotlib.pyplot or pylab
 import matplotlib.pyplot as plt
 import seaborn as sns
 import sys
@@ -66,8 +66,8 @@ def getOptions():
         help="how many base in 5' end as index? (default: 13)")
     parser.add_argument('-q', '--barcodeCutOff', type=int, default=30,
         help="Average base calling quality for barcode sequence (default=30)")
-    parser.add_argument('-f', '--voteCutOff', type=float, default=0.9,
-            help="The threshold of fraction in a position for a concensus base to be called (default: 0.9) ")
+    parser.add_argument('-f', '--voteCutOff', type=float, default=0.95,
+            help="The threshold of fraction in a position for a concensus base to be called (default: 0.95) ")
     parser.add_argument('-v', '--printScore', action = 'store_true',
             help="Printing score for each base to stdout (default: False)")
     parser.add_argument("-n", "--retainN", action='store_true',
