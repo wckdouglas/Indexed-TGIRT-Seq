@@ -2,7 +2,10 @@
 title: "Tag-based Error correction"
 author: "Dougals Wu"
 date: "May 4, 2015"
-output: html_document
+output:
+  pdf_document: default
+  html_document:
+    code_folding: hide
 ---
 
 This is a note for myself on the tag-based error correction program that I coded up (Figure 1). This is inspired from a combination of two works, [circ-seq](http://www.ncbi.nlm.nih.gov/pubmed/24243955) and [safe-seq](http://www.pnas.org/content/108/23/9530).
@@ -65,7 +68,7 @@ posteriors <- sapply(bases, getPosterior, b, q)
 posteriorsDist <- posteriors/sum(posteriors)
 qplot(bases, posteriorsDist) + 
   geom_bar(stat='identity') +
-  labs(x = ' hi', y = 'Posterior Probability')
+  labs(x = ' ', y = 'Posterior Probability')
 
 ```
 
