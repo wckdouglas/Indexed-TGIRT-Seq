@@ -1,9 +1,7 @@
 #!/bin/env python
 
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
-from scipy.misc import logsumexp
 from sys import stderr
-from multiprocessing import Pool, Manager, Process
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Must be before importing matplotlib.pyplot or pylab
@@ -16,7 +14,6 @@ import gzip
 import time
 from os import path
 import os
-
 sns.set_style('white')
 programname = path.basename(sys.argv[0]).split('.')[0]
 
@@ -60,14 +57,10 @@ def getOptions():
         help='Paired end Fastq file 2 with four line/record')
     parser.add_argument('-m', '--cutoff', type=int,default=4,
         help="minimum read count for each read cluster (default: 4)")
-    parser.add_argument("-t", "--threads", type=int, default=1,
-        help="number of threads to use (default: 1)")
     parser.add_argument("-x", "--idxBase", type=int, default=13,
         help="how many base in 5' end as index? (default: 13)")
     parser.add_argument('-q', '--barcodeCutOff', type=int, default=30,
         help="Average base calling quality for barcode sequence (default=30)")
-    parser.add_argument('-f', '--voteCutOff', type=float, default=0.95,
-            help="The threshold of fraction in a position for a concensus base to be called (default: 0.95) ")
     parser.add_argument('-v', '--printScore', action = 'store_true',
             help="Printing score for each base to stdout (default: False)")
     parser.add_argument("-n", "--retainN", action='store_true',
@@ -77,13 +70,26 @@ def getOptions():
     inFastq1 = args.fastq1
     inFastq2 = args.fastq2
     idxBase = args.idxBase
-    threads = args.threads
     minReadCount = args.cutoff
     retainN = args.retainN
     printScore = args.printScore
     barcodeCutOff = args.barcodeCutOff
-    voteCutOff = args.voteCutOff
-    return outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, retainN, barcodeCutOff,  voteCutOff, printScore
+    return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, printScore
+
+def qual2Prob(q):
+    ''' 
+    Given a q list,
+    return a list of prob
+    '''
+    return np.power(10, np.true_divide(-q,10))
+
+def calculatePosterior(guessBase, columnBases, qualities):
+    qualHit = qualities[columnBases==guessBase]
+    qualMissed = qualities[columnBases!=guessBase]
+    numerator = np.prod(1- qual2Prob(qualHit))
+    denominator = np.sum([numerator, np.prod(np.true_divide(qual2Prob(qualMissed),3))])
+    posterior = np.true_divide(numerator, denominator)
+    return posterior
 
 def calculateConcensusBase(arg):
     """Given a list of sequences, 
@@ -92,32 +98,34 @@ def calculateConcensusBase(arg):
     return the maximum likelihood base at the given position,
         along with the mean quality of these concensus bases.
     """
-    seqList, qualList, pos,  voteCutOff, printScore, lock = arg
-    columnBases = np.array([],dtype='string')
-    qualities = np.array([],dtype='int64')
-    for seq, qual in zip(seqList, qualList):
-        columnBases = np.append(columnBases,seq[pos])
-        qualities = np.append(qualities,ord(qual[pos]))
-    uniqueBases, baseCount = np.unique(columnBases, return_counts=True)
-    maxCount = np.amax(baseCount)
-    concensusBase = uniqueBases[baseCount == maxCount][0] if np.true_divide(maxCount,np.sum(baseCount)) > voteCutOff else 'N'
+    seqList, qualList, pos, printScore = arg
+    no_of_reads = len(seqList)
+    acceptable_bases = np.array(['A','C','T','G'], dtype='string')
+    columnBases = np.empty(no_of_reads,dtype='string')
+    qualities = np.empty(no_of_reads,dtype='int64')
+    for seq, qual, i  in zip(seqList, qualList, range(no_of_reads)):
+        columnBases[i] = seq[pos]
+        qualities[i] = ord(qual[pos])
+    posteriors = [calculatePosterior(guessBase, columnBases, qualities) for guessBase in acceptable_bases]
+    concensusBase = acceptable_bases[np.argmax(posteriors)]
     # offset -33
-    quality = np.mean(qualities[columnBases==concensusBase]) if concensusBase in columnBases else 33
+    quality = 10 * np.log10(1 - np.max(posteriors)) 
+    quality = quality if quality <= 93 else 93
     return concensusBase, quality
 
-def concensusSeq(seqList, qualList, positions,  voteCutOff, printScore, lock):
+def concensusSeq(seqList, qualList, positions, printScore):
     """given a list of sequences, a list of quality and sequence length. 
         assertion: all seq in seqlist should have same length (see function: selectSeqLength)
     return a consensus sequence and the mean quality line (see function: calculateConcensusBase)
     """
-    concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos,  voteCutOff, printScore, lock) for pos in positions])
+    concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos, printScore) for pos in positions])
     bases, quals = zip(*concensusPosition)
     sequence = ''.join(list(bases))
     quality = ''.join([chr(int(q)) for q in list(quals)])
     return sequence, quality
 
 
-def concensusPairs(reads,  voteCutOff, printScore, lock):
+def concensusPairs(reads, printScore):
     """ given a pair of reads as defined as the class: seqRecord
     return concensus sequence and mean quality of the pairs, 
         as well as the number of reads that supports the concnesus pairs
@@ -126,12 +134,12 @@ def concensusPairs(reads,  voteCutOff, printScore, lock):
     # get concensus left reads first
     sequenceLeft, qualityLeft = concensusSeq(reads.seqListLeft, reads.qualListLeft,  
                                             range(np.unique(reads.readLengthLeft())[0]),  
-                                             voteCutOff, printScore, lock)
+                                             printScore)
     assert len(sequenceLeft) == len(qualityLeft), 'Wrong concensus sequence and quality!'
     # get concensus right reads first
     sequenceRight, qualityRight = concensusSeq(reads.seqListRight, reads.qualListRight,  
                                                 range(np.unique(reads.readLengthRight())[0]), 
-                                                 voteCutOff, printScore, lock)
+                                                 printScore)
     assert len(sequenceRight) == len(qualityRight), 'Wrong concensus sequence and quality!'
     return sequenceLeft, qualityLeft, len(reads.seqListLeft), \
             sequenceRight, qualityRight, len(reads.seqListRight)
@@ -144,8 +152,8 @@ def selectSeqLength(readLengthArray):
     seqlength, count = np.unique(readLengthArray, return_counts=True)
     return seqlength[count==max(count)][0]
 
-def errorFreeReads(readCluster, index, counter, lock, minReadCount, 
-        retainN, voteCutOff, printScore, results):
+def errorFreeReads(readCluster, index, counter, minReadCount, 
+        retainN, printScore):
     """
     main function for getting concensus sequences from read clusters.
     return  a pair of concensus reads with a 4-line fastq format
@@ -158,19 +166,16 @@ def errorFreeReads(readCluster, index, counter, lock, minReadCount,
     # skip if not enough sequences to perform voting
     if readCluster is not None and readCluster.readCounts() > minReadCount:
         sequenceLeft, qualityLeft, supportedLeftReads, \
-        sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster, voteCutOff, printScore, lock)
+        sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster, printScore)
         if (retainN == False and 'N' not in sequenceRight and 'N' not in sequenceLeft) or (retainN == True and set(sequenceLeft)!={'N'}):
-            lock.acquire()
-            counter.value += 1
-            clusterCount = counter.value
+            counter += 1
             leftRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
-                %(counter.value, index, supportedLeftReads, sequenceLeft, qualityLeft)
+                %(counter, index, supportedLeftReads, sequenceLeft, qualityLeft)
             rightRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
-                %(counter.value, index, supportedRightReads, sequenceRight, qualityRight)
-            if clusterCount % 100000 == 0:
-                stderr.write('[%s] Processed %i read clusters.\n' %(programname,clusterCount))
-            lock.release()
-            results.append((leftRecord,rightRecord))
+                %(counter, index, supportedRightReads, sequenceRight, qualityRight)
+            if counter % 100000 == 0:
+                stderr.write('[%s] Processed %i read clusters.\n' %(programname, counter))
+            return(leftRecord,rightRecord)
 
 def readClustering(args):
     """
@@ -223,25 +228,19 @@ def plotBCdistribution(barcodeDict, outputprefix):
     stderr.write('Plotted %s.\n' %figurename)
     return 0
 
-def clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount,
-         retainN, barcodeCutOff, voteCutOff, printScore):
+def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
+         retainN, barcodeCutOff, printScore):
     barcodeDict = {}
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
-        map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN) for read1,read2 in zip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
+        map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN) for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
     stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
     plotBCdistribution(barcodeDict, outputprefix)
 
     # From index library, generate error free reads
     # using multicore to process read clusters
-    counter = Manager().Value('i',0)
-    lock = Manager().Lock()
-    results = Manager().list([])
-    pool = Pool(processes=threads)
-    [pool.apply_async(errorFreeReads, (barcodeDict[index],index, counter, lock, 
-                        minReadCount, retainN,  voteCutOff, printScore, results)) \
-                for index in barcodeDict.keys()]
-    pool.close()
-    pool.join()
+    counter = 0
+    results = [errorFreeReads(barcodeDict[index], index, counter, minReadCount, retainN, printScore) for index in barcodeDict.keys()]
+    results = filter(None,  results)
     # since some cluster that do not have sufficient reads
     # will return None, results need to be filtered
     if (len(results) == 0):
@@ -258,8 +257,8 @@ def clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, m
     stderr.write('[%s]     output clusters:  %i\n' %(programname, len(left)))
     return 0
 
-def main(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount,
-            retainN, barcodeCutOff, voteCutOff, printScore):
+def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
+            retainN, barcodeCutOff, printScore):
     """
     main function:
         controlling work flow
@@ -276,29 +275,15 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount,
     stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,minReadCount))
     stderr.write( '[%s]     outputPrefix:                      %s\n' %(programname,outputprefix))
     stderr.write( '[%s]     retaining N-containing sequence:   %r\n' %(programname,retainN))
-    stderr.write( '[%s]     base fraction cutoff:              %.3f\n' %(programname,voteCutOff))
     
     # divide reads into subclusters
-    tempDir = '%s_tmp' %outputprefix
-    os.system('rm -rf  %s' %tempDir)
-    stderr.write('[%s] Cleaned %s\n'%(programname,tempDir))
-    os.system('mkdir -p %s' %tempDir)
-    subIdx = 0
-    if subIdx > 1:
-        subFq1, subFq2 = subCluster(inFastq1, inFastq2, subIdx, outputprefix, threads)
-        for subFq1, subFq2 in zip(subFq1, subFq2):
-            clusteringAndJoinFiles(outputprefix, subFq1, subFq2, idxBase, threads, minReadCount,
-                                retainN, barcodeCutOff, voteCutOff, printScore)
-    else:
-        clusteringAndJoinFiles(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount,
-                                retainN, barcodeCutOff, voteCutOff, printScore)
-    os.system('rm -rf  %s' %tempDir)
-    stderr.write('[%s] Cleaned %s\n'%(programname,tempDir))
+    clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
+                                retainN, barcodeCutOff, printScore)
     stderr.write('[%s]     time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
         
 if __name__ == '__main__':
-    outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, \
-            retainN, barcodeCutOff, voteCutOff, printScore = getOptions()
-    main(outputprefix, inFastq1, inFastq2, idxBase, threads, minReadCount, 
-            retainN, barcodeCutOff, voteCutOff, printScore)
+    outputprefix, inFastq1, inFastq2, idxBase, minReadCount, \
+            retainN, barcodeCutOff,  printScore = getOptions()
+    main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, 
+            retainN, barcodeCutOff,  printScore)
