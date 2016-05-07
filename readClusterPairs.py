@@ -63,7 +63,9 @@ def getOptions():
     parser.add_argument('-q', '--barcodeCutOff', type=int, default=30,
         help="Average base calling quality for barcode sequence (default=30)")
     parser.add_argument("-n", "--retainN", action='store_true',
-        help="Use N-containing sequence for concensus base vote and output sequences containing N (defulat: False)")
+        help="Use N-containing sequence for concensus base vote and output sequences containing N (default: False)")
+    parser.add_argument("-t", "--threads", type=int, default = 1,
+        help="Threads to use (default: 1)")
     args = parser.parse_args()
     outputprefix = args.outputprefix
     inFastq1 = args.fastq1
@@ -72,7 +74,8 @@ def getOptions():
     minReadCount = args.cutoff
     retainN = args.retainN
     barcodeCutOff = args.barcodeCutOff
-    return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff
+    threads = args.threads
+    return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads
 
 def qual2Prob(q):
     ''' 
@@ -164,20 +167,22 @@ def errorFreeReads(args):
     #if readCluster.readCounts() > minReadCount:
     #    reads = filterRead(readCluster)
     # skip if not enough sequences to perform voting
-    readCluster, index, counter, minReadCount, retainN = args
+    readCluster, index, counter, minReadCount, retainN, lock = args
     if readCluster is not None and readCluster.readCounts() > minReadCount:
         sequenceLeft, qualityLeft, supportedLeftReads, \
         sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster)
         if (retainN == False and 'N' not in sequenceRight and 'N' not in sequenceLeft) or (retainN == True and set(sequenceLeft)!={'N'}):
+            lock.acquire()
             count = counter.value
             count += 1
+            counter.value = count
+            lock.release()
             leftRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
                 %(count, index, supportedLeftReads, sequenceLeft, qualityLeft)
             rightRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
                 %(count, index, supportedRightReads, sequenceRight, qualityRight)
             if count % 100000 == 0:
                 stderr.write('[%s] Processed %i read clusters.\n' %(programname, count))
-            counter.value = count
             return(leftRecord,rightRecord)
 
 def readClustering(args):
@@ -185,7 +190,7 @@ def readClustering(args):
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idxBases/ of read 1 
     """
-    read1, read2, barcodeDict, idxBase, barcodeCutOff, retainedN = args
+    read1, read2, barcodeDict, idxBase, barcodeCutOff, retainedN, lock = args
     idLeft, seqLeft, qualLeft = read1
     idRight, seqRight, qualRight = read2
     assert idLeft.split(' ')[0] == idRight.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(idRight, idLeft)
@@ -195,9 +200,11 @@ def readClustering(args):
     not any(pattern in barcode for pattern in ['AAAA','CCCC','TTTT','GGGG']) and \
     ((retainedN==False and 'N' not in seqLeft and 'N' not in seqRight) or retainedN==True): #and seqLeft[idxBase:(idxBase+6)] == 'TTTTGA':
         seqLeft = seqLeft[idxBase:]
+        lock.acquire()
         record = barcodeDict.get(barcode,seqRecord()) 
         record.addRecord(seqRight, qualRight, seqLeft, qualLeft)
         barcodeDict[barcode] = record
+        lock.release()
     return 0
 
 def writeFile(outputprefix, leftReads, rightReads):
@@ -216,7 +223,8 @@ def writeFile(outputprefix, leftReads, rightReads):
 
 def plotBCdistribution(barcodeDict, outputprefix):
     #plotting inspection of barcode distribution
-    barcodeCount = np.array([record.readCounts() for record in barcodeDict.values()],dtype='int64')
+    barcodeCount = [barcodeDict[key].readCounts() for key in barcodeDict.keys()]
+    barcodeCount = np.array(barcodeCount, dtype=np.int64)
     hist, bins = np.histogram(barcodeCount[barcodeCount<50],bins=50)
     centers = (bins[:-1] + bins[1:]) / 2
     width = 0.7 * (bins[1] - bins[0])
@@ -234,22 +242,21 @@ def plotBCdistribution(barcodeDict, outputprefix):
     stderr.write('Plotted %s.\n' %figurename)
     return 0
 
-def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
-         retainN, barcodeCutOff):
-    threads = 24
+def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads):
     manager = Manager()
     barcodeDict = manager.dict({})
+    lock = manager.Lock()
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         pool = Pool(threads)
-        pool.map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN) for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
+        result = pool.map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN, lock) for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
     stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
-    plotBCdistribution(barcodeDict, outputprefix)
+    p = plotBCdistribution(barcodeDict, outputprefix)
 
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = manager.Value('i',0)
-    results = Pool(threads).map(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, retainN)\
-            for index in barcodeDict.keys()])
+    results = pool.map(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, retainN, lock) for index in barcodeDict.keys()])
+    pool.close()
     results = filter(None,  results)
     # since some cluster that do not have sufficient reads
     # will return None, results need to be filtered
@@ -268,7 +275,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     return 0
 
 def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
-            retainN, barcodeCutOff):
+            retainN, barcodeCutOff, threads):
     """
     main function:
         controlling work flow
@@ -281,16 +288,16 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     #print out parameters
     stderr.write( '[%s] Using parameters: \n')
     stderr.write( '[%s]     indexed bases:                     %i\n' %(programname,idxBase))
+    stderr.write( '[%s]     threads:                           %i\n' %(programname, threads))
     stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,minReadCount))
     stderr.write( '[%s]     outputPrefix:                      %s\n' %(programname,outputprefix))
     stderr.write( '[%s]     retaining N-containing sequence:   %r\n' %(programname,retainN))
     
     # divide reads into subclusters
-    clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
-                                retainN, barcodeCutOff)
+    clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads)
     stderr.write('[%s]     time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
         
 if __name__ == '__main__':
-    outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff = getOptions()
-    main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff)
+    outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads = getOptions()
+    main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads)
