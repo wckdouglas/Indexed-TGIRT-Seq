@@ -12,8 +12,8 @@ Scripts:
 ### readClusterPairs.py
 ```
 usage: readClusterPairs.py [-h] -o OUTPUTPREFIX -1 FASTQ1 -2 FASTQ2
-                           [-m CUTOFF] [-t THREADS] [-x IDXBASE]
-                           [-q BARCODECUTOFF] [-f VOTECUTOFF] [-v] [-n]
+                           [-m CUTOFF] [-x IDXBASE] [-q BARCODECUTOFF] [-n]
+                           [-t THREADS]
 
 Clustering fastq reads to fasta reads with the first $IDXBASE bases as cDNA-
 synthesis barcode. Concensus bases are called only when the fraction of reads
@@ -31,20 +31,15 @@ optional arguments:
                         Paired end Fastq file 2 with four line/record
   -m CUTOFF, --cutoff CUTOFF
                         minimum read count for each read cluster (default: 4)
-  -t THREADS, --threads THREADS
-                        number of threads to use (default: 1)
   -x IDXBASE, --idxBase IDXBASE
-                        how many base in 5\' end as index? (default: 13)
+                        how many base in 5' end as index? (default: 13)
   -q BARCODECUTOFF, --barcodeCutOff BARCODECUTOFF
                         Average base calling quality for barcode sequence
                         (default=30)
-  -f VOTECUTOFF, --voteCutOff VOTECUTOFF
-                        The threshold of fraction in a position for a
-                        concensus base to be called (default: 0.9)
-  -v, --printScore      Printing score for each base to stdout (default:
-                        False)
   -n, --retainN         Use N-containing sequence for concensus base vote and
-                        output sequences containing N (defulat: False)
+                        output sequences containing N (default: False)
+  -t THREADS, --threads THREADS
+                        Threads to use (default: 1)
 ```
 
 ### pileupBam.py
