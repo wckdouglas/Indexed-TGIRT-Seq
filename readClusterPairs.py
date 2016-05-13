@@ -267,7 +267,6 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN,
     left, right = zip(*results)
     stderr.write('[%s] Extracted error free reads\n' %(programname))
     # use two cores for parallel writing file
-    assert len(left) == len(right), 
     read1File, read2File = writeFile(outputprefix, list(left), list(right))
 
     # all done!
