@@ -17,6 +17,8 @@ from itertools import izip
 from multiprocessing import Pool, Manager
 sns.set_style('white')
 programname = os.path.basename(sys.argv[0]).split('.')[0]
+minQ = 33
+maxQ = 73
 
 #    ==================      Sequence class sotring left right record =============
 class seqRecord:
@@ -115,9 +117,9 @@ def calculateConcensusBase(arg):
     maxLikHood = np.argmax(posteriors)
     concensusBase = acceptable_bases[maxLikHood]
     posterior = posteriors[maxLikHood]
-    quality = -10 * np.log10(1 - posterior) if posterior < 1 else 93
-    quality[quality<33] = 33
-    quality[quality<69] = 69
+    quality = -10 * np.log10(1 - posterior) + 33 if posterior < 1 else maxQ
+    quality[quality<minQ] = minQ
+    quality[quality<maxQ] = maxQ
     return concensusBase, quality
 
 def concensusSeq(seqList, qualList, positions):
