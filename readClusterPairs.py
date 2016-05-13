@@ -116,7 +116,8 @@ def calculateConcensusBase(arg):
     concensusBase = acceptable_bases[maxLikHood]
     posterior = posteriors[maxLikHood]
     quality = -10 * np.log10(1 - posterior) if posterior < 1 else 93
-    quality = quality if quality <= 93 else 93
+    quality[quality<33] = 33
+    quality[quality<69] = 69
     return concensusBase, quality
 
 def concensusSeq(seqList, qualList, positions):
@@ -138,15 +139,12 @@ def concensusPairs(reads):
     see function: concensusSeq, calculateConcensusBase
     """
     # get concensus left reads first
-    sequenceLeft, qualityLeft = concensusSeq(reads.seqListLeft, reads.qualListLeft,  
-                                            range(np.unique(reads.readLengthLeft())[0]))
+    sequenceLeft, qualityLeft = concensusSeq(reads.seqListLeft, reads.qualListLeft, range(np.unique(reads.readLengthLeft())[0]))
     assert len(sequenceLeft) == len(qualityLeft), 'Wrong concensus sequence and quality!'
     # get concensus right reads first
-    sequenceRight, qualityRight = concensusSeq(reads.seqListRight, reads.qualListRight,  
-                                                range(np.unique(reads.readLengthRight())[0]))
+    sequenceRight, qualityRight = concensusSeq(reads.seqListRight, reads.qualListRight, range(np.unique(reads.readLengthRight())[0]))
     assert len(sequenceRight) == len(qualityRight), 'Wrong concensus sequence and quality!'
-    return sequenceLeft, qualityLeft, len(reads.seqListLeft), \
-            sequenceRight, qualityRight, len(reads.seqListRight)
+    return sequenceLeft, qualityLeft, len(reads.seqListLeft), sequenceRight, qualityRight, len(reads.seqListRight)
 
 def selectSeqLength(readLengthArray):
     """
@@ -169,8 +167,7 @@ def errorFreeReads(args):
     # skip if not enough sequences to perform voting
     readCluster, index, counter, minReadCount, retainN, lock = args
     if readCluster is not None and readCluster.readCounts() > minReadCount:
-        sequenceLeft, qualityLeft, supportedLeftReads, \
-        sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster)
+        sequenceLeft, qualityLeft, supportedLeftReads, sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster)
         if (retainN == False and 'N' not in sequenceRight and 'N' not in sequenceLeft) or (retainN == True and set(sequenceLeft)!={'N'}):
             lock.acquire()
             count = counter.value
@@ -228,13 +225,14 @@ def plotBCdistribution(barcodeDict, outputprefix):
     hist, bins = np.histogram(barcodeCount[barcodeCount<50],bins=50)
     centers = (bins[:-1] + bins[1:]) / 2
     width = 0.7 * (bins[1] - bins[0])
+    hist = np.true_divide(hist,np.sum(hist))
     figurename = '%s.png' %(outputprefix)
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax.bar(centers,hist,align='center',width=width)
     ax.set_xlabel("Number of occurence")
     ax.set_ylabel("Count of tags")
-    ax.set_yscale('log',nonposy='clip')
+#    ax.set_yscale('log',nonposy='clip')
     ax.set_title(outputprefix.split('/')[-1])
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
@@ -249,14 +247,18 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN,
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         pool = Pool(threads)
         result = pool.map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN, lock) for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
+        pool.close()
+        pool.join()
     stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
     p = plotBCdistribution(barcodeDict, outputprefix)
 
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = manager.Value('i',0)
+    pool = Pool(threads)
     results = pool.map(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, retainN, lock) for index in barcodeDict.keys()])
     pool.close()
+    pool.join()
     results = filter(None,  results)
     # since some cluster that do not have sufficient reads
     # will return None, results need to be filtered
@@ -265,6 +267,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN,
     left, right = zip(*results)
     stderr.write('[%s] Extracted error free reads\n' %(programname))
     # use two cores for parallel writing file
+    assert len(left) == len(right), 
     read1File, read2File = writeFile(outputprefix, list(left), list(right))
 
     # all done!
@@ -286,7 +289,7 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     start = time.time()
 
     #print out parameters
-    stderr.write( '[%s] Using parameters: \n')
+    stderr.write( '[%s] Using parameters: \n' %(programname))
     stderr.write( '[%s]     indexed bases:                     %i\n' %(programname,idxBase))
     stderr.write( '[%s]     threads:                           %i\n' %(programname, threads))
     stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,minReadCount))
