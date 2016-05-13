@@ -39,10 +39,10 @@ class seqRecord:
         return len(self.seqListRight)
 
     def readLengthRight(self):
-        return np.array([len(seq) for seq in self.seqListRight],dtype='int64')
+        return np.array([len(seq) for seq in self.seqListRight],dtype=np.int64)
 
     def readLengthLeft(self):
-        return np.array([len(seq) for seq in self.seqListLeft],dtype='int64')
+        return np.array([len(seq) for seq in self.seqListLeft],dtype=np.int64)
 
 #======================  starting functions =============================
 def getOptions():
@@ -108,7 +108,7 @@ def calculateConcensusBase(arg):
     no_of_reads = len(seqList)
     acceptable_bases = np.array(['A','C','T','G'], dtype='string')
     columnBases = np.empty(no_of_reads,dtype='string')
-    qualities = np.empty(no_of_reads,dtype='int64')
+    qualities = np.empty(no_of_reads,dtype=np.int64)
     for seq, qual, i  in zip(seqList, qualList, range(no_of_reads)):
         columnBases[i] = seq[pos]
         qualities[i] = ord(qual[pos])
@@ -120,6 +120,7 @@ def calculateConcensusBase(arg):
     quality = -10 * np.log10(1 - posterior) + 33 if posterior < 1 else maxQ
     quality[quality<minQ] = minQ
     quality[quality<maxQ] = maxQ
+    quality = np.array(quality, dtype=np.int64)
     return concensusBase, quality
 
 def concensusSeq(seqList, qualList, positions):
@@ -130,7 +131,7 @@ def concensusSeq(seqList, qualList, positions):
     concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos) for pos in positions])
     bases, quals = zip(*concensusPosition)
     sequence = ''.join(list(bases))
-    quality = ''.join([chr(int(q)) for q in list(quals)])
+    quality = ''.join(map(chr,quals))
     return sequence, quality
 
 
