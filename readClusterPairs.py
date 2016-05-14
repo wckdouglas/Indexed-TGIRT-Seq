@@ -118,9 +118,6 @@ def calculateConcensusBase(arg):
     concensusBase = acceptable_bases[maxLikHood]
     posterior = posteriors[maxLikHood]
     quality = -10 * np.log10(1 - posterior) + 33 if posterior < 1 else maxQ
-    quality[quality<minQ] = minQ
-    quality[quality<maxQ] = maxQ
-    quality = np.array(quality, dtype=np.int64)
     return concensusBase, quality
 
 def concensusSeq(seqList, qualList, positions):
@@ -130,8 +127,11 @@ def concensusSeq(seqList, qualList, positions):
     """
     concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos) for pos in positions])
     bases, quals = zip(*concensusPosition)
+    quality = np.array(quals,dtype=np.int64)
+    quality[quality<minQ] = minQ
+    quality[quality > maxQ] = maxQ
     sequence = ''.join(list(bases))
-    quality = ''.join(map(chr,quals))
+    quality = ''.join(map(chr,quality))
     return sequence, quality
 
 
@@ -259,7 +259,8 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN,
     # using multicore to process read clusters
     counter = manager.Value('i',0)
     pool = Pool(threads)
-    results = pool.map(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, retainN, lock) for index in barcodeDict.keys()])
+#    results = pool.map(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, retainN, lock) for index in barcodeDict.keys()])
+    results = map(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, retainN, lock) for index in barcodeDict.keys()])
     pool.close()
     pool.join()
     results = filter(None,  results)
