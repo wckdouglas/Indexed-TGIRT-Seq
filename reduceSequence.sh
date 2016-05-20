@@ -1,19 +1,20 @@
 #!/bin/bash
 
-PROJECT_PATH=/stor/work/Lambowitz/cdw2854/TGIRT_DNA
+PROJECT_PATH=/stor/work/Lambowitz/cdw2854/jurkatCells
 DATA_PATH=$PROJECT_PATH/rawData
 RESULT_PATH=$PROJECT_PATH/splitted
+LOG_PATH=$RESULT_PATH/logs
 SUFFIX=_R1_001.fastq.gz
-mkdir -p logs
+mkdir -p  $RESULT_PATH $LOG_PATH
 
 for FQ1 in `ls $DATA_PATH/*${SUFFIX}`
 do
 	SAMPLE_NAME=$(basename ${FQ1%$SUFFIX})
 	FQ2=${FQ1/R1/R2}
-	echo python readClusterPairs.py -o $RESULT_PATH/$SAMPLE_NAME-errorFree \
-									-1 $FQ1 -2 $FQ2 -x 13 -q 30 \
-									-m 6 -t 12 \
-		\&\> logs/${SAMPLE_NAME}.log
+	echo python readClusterPairs.py --outputprefix=$RESULT_PATH/$SAMPLE_NAME-errorFree \
+									--fastq1=$FQ1 --fastq2=$FQ2 --idxBase=13 --barcodeCutOff=30 \
+									--cutoff=3 --threads=12 --constant_region=CATCG \
+		\&\> $LOG_PATH/${SAMPLE_NAME}.log
 done
 
 

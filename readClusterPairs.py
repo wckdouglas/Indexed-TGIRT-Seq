@@ -69,6 +69,8 @@ def getOptions():
         help="Use N-containing sequence for concensus base vote and output sequences containing N (default: False)")
     parser.add_argument("-t", "--threads", type=int, default = 1,
         help="Threads to use (default: 1)")
+    parser.add_argument("-c", "--constant_region", default='',
+            help="Constant sequence after tags (default: '')")
     args = parser.parse_args()
     outputprefix = args.outputprefix
     inFastq1 = args.fastq1
@@ -78,7 +80,8 @@ def getOptions():
     retainN = args.retainN
     barcodeCutOff = args.barcodeCutOff
     threads = args.threads
-    return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads
+    constant = args.constant_region
+    return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads, constant
 
 def qual2Prob(q):
     ''' 
@@ -191,18 +194,18 @@ def readClustering(args):
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idxBases/ of read 1 
     """
-    read1, read2, barcodeDict, idxBase, barcodeCutOff, retainedN, lock = args
+    read1, read2, barcodeDict, idxBase, barcodeCutOff, retainedN, lock, constant = args
     idLeft, seqLeft, qualLeft = read1
     idRight, seqRight, qualRight = read2
     assert idLeft.split(' ')[0] == idRight.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(idRight, idLeft)
     barcode = seqLeft[:idxBase]
-    constant = 'CATCG'
-    constant_regions = seqLeft[idxBase:idxBase+len(constant)]
+    constant_length = len(constant)
+    constant_regions = seqLeft[idxBase:idxBase+constant_length]
     barcodeQualmean = int(np.mean([ord(q) for q in qualLeft[:idxBase]]) - 33)
     if ('N' not in barcode and barcodeQualmean > barcodeCutOff ) and \
-    not any(pattern in barcode for pattern in ['AAAA','CCCC','TTTT','GGGG']) and constant_regions == constant \
+    not any(pattern in barcode for pattern in ['AAAA','CCCC','TTTT','GGGG']) and constant_regions == constant and \
     ((retainedN==False and 'N' not in seqLeft and 'N' not in seqRight) or retainedN==True): 
-        seqLeft = seqLeft[idxBase:]
+        seqLeft = seqLeft[idxBase+constant_length:]
         lock.acquire()
         record = barcodeDict.get(barcode,seqRecord()) 
         record.addRecord(seqRight, qualRight, seqLeft, qualLeft)
@@ -246,13 +249,13 @@ def plotBCdistribution(barcodeDict, outputprefix):
     stderr.write('Plotted %s.\n' %figurename)
     return 0
 
-def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads):
+def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads, constant):
     manager = Manager()
     barcodeDict = manager.dict(sorteddict({}))
     lock = manager.Lock()
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         pool = Pool(threads)
-        result = pool.map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN, lock) for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
+        result = pool.map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN, lock, constant) for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
         pool.close()
         pool.join()
     stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
@@ -283,7 +286,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN,
     return 0
 
 def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
-            retainN, barcodeCutOff, threads):
+            retainN, barcodeCutOff, threads, constant):
     """
     main function:
         controlling work flow
@@ -300,12 +303,13 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,minReadCount))
     stderr.write( '[%s]     outputPrefix:                      %s\n' %(programname,outputprefix))
     stderr.write( '[%s]     retaining N-containing sequence:   %r\n' %(programname,retainN))
+    stderr.write( '[%s]     using constant regions:   %s\n' %(programname,constant))
     
     # divide reads into subclusters
-    clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads)
+    clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads, constant)
     stderr.write('[%s]     time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
         
 if __name__ == '__main__':
-    outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads = getOptions()
-    main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads)
+    outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads, constant = getOptions()
+    main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads, constant)
