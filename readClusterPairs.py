@@ -15,6 +15,7 @@ import time
 import os
 from itertools import izip
 from multiprocessing import Pool, Manager
+from blist import sorteddict
 sns.set_style('white')
 programname = os.path.basename(sys.argv[0]).split('.')[0]
 minQ = 33
@@ -195,10 +196,12 @@ def readClustering(args):
     idRight, seqRight, qualRight = read2
     assert idLeft.split(' ')[0] == idRight.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(idRight, idLeft)
     barcode = seqLeft[:idxBase]
+    constant = 'CATCG'
+    constant_regions = seqLeft[idxBase:idxBase+len(constant)]
     barcodeQualmean = int(np.mean([ord(q) for q in qualLeft[:idxBase]]) - 33)
     if ('N' not in barcode and barcodeQualmean > barcodeCutOff ) and \
-    not any(pattern in barcode for pattern in ['AAAA','CCCC','TTTT','GGGG']) and \
-    ((retainedN==False and 'N' not in seqLeft and 'N' not in seqRight) or retainedN==True): #and seqLeft[idxBase:(idxBase+6)] == 'TTTTGA':
+    not any(pattern in barcode for pattern in ['AAAA','CCCC','TTTT','GGGG']) and constant_regions == constant \
+    ((retainedN==False and 'N' not in seqLeft and 'N' not in seqRight) or retainedN==True): 
         seqLeft = seqLeft[idxBase:]
         lock.acquire()
         record = barcodeDict.get(barcode,seqRecord()) 
@@ -245,7 +248,7 @@ def plotBCdistribution(barcodeDict, outputprefix):
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads):
     manager = Manager()
-    barcodeDict = manager.dict({})
+    barcodeDict = manager.dict(sorteddict({}))
     lock = manager.Lock()
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         pool = Pool(threads)
@@ -259,8 +262,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN,
     # using multicore to process read clusters
     counter = manager.Value('i',0)
     pool = Pool(threads)
-#    results = pool.map(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, retainN, lock) for index in barcodeDict.keys()])
-    results = map(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, retainN, lock) for index in barcodeDict.keys()])
+    results = pool.map(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, retainN, lock) for index in barcodeDict.keys()])
     pool.close()
     pool.join()
     results = filter(None,  results)
