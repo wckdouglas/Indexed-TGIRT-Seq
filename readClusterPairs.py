@@ -1,10 +1,11 @@
 #!/bin/env python
 
+import matplotlib
+matplotlib.use('Agg')
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from sys import stderr
+from scipy.spatial.distance import hamming
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')  # Must be before importing matplotlib.pyplot or pylab
 import matplotlib.pyplot as plt
 import seaborn as sns
 import sys
@@ -13,9 +14,9 @@ import glob
 import gzip
 import time
 import os
-from itertools import izip
+from itertools import izip, product, imap
 from multiprocessing import Pool, Manager
-from blist import sorteddict
+import progressbar
 sns.set_style('white')
 programname = os.path.basename(sys.argv[0]).split('.')[0]
 minQ = 33
@@ -65,8 +66,6 @@ def getOptions():
         help="how many base in 5' end as index? (default: 13)")
     parser.add_argument('-q', '--barcodeCutOff', type=int, default=30,
         help="Average base calling quality for barcode sequence (default=30)")
-    parser.add_argument("-n", "--retainN", action='store_true',
-        help="Use N-containing sequence for concensus base vote and output sequences containing N (default: False)")
     parser.add_argument("-t", "--threads", type=int, default = 1,
         help="Threads to use (default: 1)")
     parser.add_argument("-c", "--constant_region", default='',
@@ -77,11 +76,14 @@ def getOptions():
     inFastq2 = args.fastq2
     idxBase = args.idxBase
     minReadCount = args.cutoff
-    retainN = args.retainN
     barcodeCutOff = args.barcodeCutOff
     threads = args.threads
     constant = args.constant_region
-    return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads, constant
+    return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant
+
+def hammingDistance(expected_constant, constant_region):
+    dist = hamming(list(expected_constant),list(constant_region))
+    return dist
 
 def qual2Prob(q):
     ''' 
@@ -115,13 +117,13 @@ def calculateConcensusBase(arg):
     qualities = np.empty(no_of_reads,dtype=np.int64)
     for seq, qual, i  in zip(seqList, qualList, range(no_of_reads)):
         columnBases[i] = seq[pos]
-        qualities[i] = ord(qual[pos])
+        qualities[i] = qual[pos] -33
     posteriors = [calculatePosterior(guessBase, columnBases, qualities) for guessBase in acceptable_bases]
     posteriors = np.true_divide(posteriors, np.sum(posteriors))
     maxLikHood = np.argmax(posteriors)
     concensusBase = acceptable_bases[maxLikHood]
     posterior = posteriors[maxLikHood]
-    quality = -10 * np.log10(1 - posterior) + 33 if posterior < 1 else maxQ
+    quality = -10 * np.log10(1 - posterior) if posterior < 1 else maxQ
     return concensusBase, quality
 
 def concensusSeq(seqList, qualList, positions):
@@ -161,7 +163,7 @@ def selectSeqLength(readLengthArray):
     seqlength, count = np.unique(readLengthArray, return_counts=True)
     return seqlength[count==max(count)][0]
 
-def errorFreeReads(args):
+def errorFreeReads(readCluster, index, counter, minReadCount):
     """
     main function for getting concensus sequences from read clusters.
     return  a pair of concensus reads with a 4-line fastq format
@@ -172,121 +174,133 @@ def errorFreeReads(args):
     #if readCluster.readCounts() > minReadCount:
     #    reads = filterRead(readCluster)
     # skip if not enough sequences to perform voting
-    readCluster, index, counter, minReadCount, retainN, lock = args
     if readCluster is not None and readCluster.readCounts() > minReadCount:
         sequenceLeft, qualityLeft, supportedLeftReads, sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster)
-        if (retainN == False and 'N' not in sequenceRight and 'N' not in sequenceLeft) or (retainN == True and set(sequenceLeft)!={'N'}):
-            lock.acquire()
-            count = counter.value
-            count += 1
-            counter.value = count
-            lock.release()
-            leftRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
+	counter.value += 1
+        count = counter.value
+        leftRecord = '@cluster_%i_%s %i readCluster\n%s\n+\n%s\n' \
                 %(count, index, supportedLeftReads, sequenceLeft, qualityLeft)
-            rightRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
+        rightRecord = '@cluster_%i_%s %i readCluster\n%s\n+\n%s\n' \
                 %(count, index, supportedRightReads, sequenceRight, qualityRight)
-            if count % 100000 == 0:
-                stderr.write('[%s] Processed %i read clusters.\n' %(programname, count))
-            return(leftRecord,rightRecord)
+        if count % 100000 == 0:
+            stderr.write('[%s] Processed %i read clusters.\n' %(programname, count))
+        return(leftRecord,rightRecord)
 
-def readClustering(args):
+def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, lock):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idxBases/ of read 1 
     """
-    read1, read2, barcodeDict, idxBase, barcodeCutOff, retainedN, lock, constant = args
     idLeft, seqLeft, qualLeft = read1
     idRight, seqRight, qualRight = read2
     assert idLeft.split(' ')[0] == idRight.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(idRight, idLeft)
     barcode = seqLeft[:idxBase]
+    qualLeft = map(ord,qualLeft)
+    qualRight = map(ord,qualRight)
     constant_length = len(constant)
-    constant_regions = seqLeft[idxBase:idxBase+constant_length]
-    barcodeQualmean = int(np.mean([ord(q) for q in qualLeft[:idxBase]]) - 33)
-    if ('N' not in barcode and barcodeQualmean > barcodeCutOff ) and \
-    not any(pattern in barcode for pattern in ['AAAA','CCCC','TTTT','GGGG']) and constant_regions == constant and \
-    ((retainedN==False and 'N' not in seqLeft and 'N' not in seqRight) or retainedN==True): 
+    constant_region = seqLeft[idxBase:idxBase+constant_length] if constant_length > 0 else 0
+    barcodeQualmean = int(np.mean(qualLeft[:idxBase]) - 33)
+    if ('N' not in barcode \
+	    and barcodeQualmean > barcodeCutOff \
+	    and not any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']) \
+	    and hammingDistance(constant, constant_region) < 0.3) :
         seqLeft = seqLeft[idxBase+constant_length:]
-        lock.acquire()
-        record = barcodeDict.get(barcode,seqRecord()) 
-        record.addRecord(seqRight, qualRight, seqLeft, qualLeft)
-        barcodeDict[barcode] = record
-        lock.release()
+	lock.acquire()
+	record = barcodeDict.get(barcode,seqRecord()) 
+	record.addRecord(seqRight, qualRight, seqLeft, qualLeft)
+	barcodeDict[barcode] = record
+	lock.release()
     return 0
 
-def writeFile(outputprefix, leftReads, rightReads):
-    """
-    write fastq lines to gzip files
-    """
-    # output file name
-    read1File = outputprefix + '_R1_001.fastq.gz'
-    read2File = outputprefix + '_R2_001.fastq.gz'
-    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
-        for left, right in zip(leftReads,rightReads):
-            assert left.split(' ')[0] == right.split(' ')[0], 'Wrong order pairs!!'
-            read1.write(left)
-            read2.write(right)
-    return read1File, read2File
-
-def plotBCdistribution(barcodeDict, outputprefix):
+def plotBCdistribution(barcodeCount, outputprefix):
     #plotting inspection of barcode distribution
-    barcodeCount = [barcodeDict[key].readCounts() for key in barcodeDict.keys()]
     barcodeCount = np.array(barcodeCount, dtype=np.int64)
-    hist, bins = np.histogram(barcodeCount[barcodeCount<50],bins=50)
-    centers = (bins[:-1] + bins[1:]) / 2
-    width = 0.7 * (bins[1] - bins[0])
-    hist = np.true_divide(hist,np.sum(hist))
+    num, count = np.unique(barcodeCount,return_counts=True)
     figurename = '%s.png' %(outputprefix)
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.bar(centers,hist,align='center',width=width)
-    ax.set_xlabel("Number of occurence")
-    ax.set_ylabel("Count of tags")
-#    ax.set_yscale('log',nonposy='clip')
-    ax.set_title(outputprefix.split('/')[-1])
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    fig.savefig(figurename)
+    with sns.plotting_context('paper',font_scale=1.3):
+        p = sns.barplot(num,count, color='salmon')
+    p.set_xlabel("Number of occurence")
+    p.set_ylabel("Count of tags")
+    p.set_yscale('log',nonposy='clip')
+    p.set_title(outputprefix.split('/')[-1])
+    p.spines['right'].set_visible(False)
+    p.spines['top'].set_visible(False)
+    plt.savefig(figurename)
     stderr.write('Plotted %s.\n' %figurename)
     return 0
 
-def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads, constant):
-    manager = Manager()
-    barcodeDict = manager.dict(sorteddict({}))
-    lock = manager.Lock()
+def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant):
+    barcodeDict = Manager().dict({})
+    lock = Manager().Lock()
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
-        pool = Pool(threads)
-        result = pool.map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, retainN, lock, constant) for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
-        pool.close()
-        pool.join()
-    stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
-    p = plotBCdistribution(barcodeDict, outputprefix)
+	pool = Pool(threads)
+	for read1, read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
+	    args = (read1, read2,barcodeDict, idxBase, barcodeCutOff, constant, lock)
+	    pool.apply_async(readClustering,args = args).get()
+	pool.close()
+	pool.join()
+    barcodeCount = [barcodeDict[key].readCounts() for key in barcodeDict.keys()]
+    barcodeCount = np.array(barcodeCount, dtype=np.int64)
 
     # From index library, generate error free reads
     # using multicore to process read clusters
-    counter = manager.Value('i',0)
+    counter = Manager().Value('i',0)
     pool = Pool(threads)
-    results = pool.map(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, retainN, lock) for index in barcodeDict.keys()])
+    iterable = barcodeDict.items()
+    results = [pool.apply_async(errorFreeReads, args=(family, index, counter, minReadCount)).get() for index, family in iterable]
     pool.close()
     pool.join()
     results = filter(None,  results)
     # since some cluster that do not have sufficient reads
     # will return None, results need to be filtered
     if (len(results) == 0):
-        sys.exit('[%s] No concensus clusters!! \n' %(programname))
+	return 0,0,0,len(barcodeDict)
+    #    sys.exit('[%s] No concensus clusters!! \n' %(programname))
     left, right = zip(*results)
-    stderr.write('[%s] Extracted error free reads\n' %(programname))
-    # use two cores for parallel writing file
-    read1File, read2File = writeFile(outputprefix, list(left), list(right))
+    return left, right, barcodeCount, len(barcodeDict)
 
-    # all done!
-    stderr.write('[%s] Finished writing error free reads\n' %programname)
-    stderr.write('[%s]     read1:            %s\n' %(programname, read1File))
-    stderr.write('[%s]     read2:            %s\n' %(programname, read2File))
-    stderr.write('[%s]     output clusters:  %i\n' %(programname, len(left)))
-    return 0
+def openTempFile(n,outputprefix):
+    tempFiles = {}
+    tempR1files = []
+    tempR2files = []
+    for splitCode in product('ACTG',repeat=n):
+	prefix = ''.join(splitCode)
+	splitR1File = outputprefix + '_' + prefix + '_R1_temp.fq.gz'
+	splitR2File = splitR1File.replace('R1','R2')
+	tempFiles[prefix] = {}
+	tempFiles[prefix]['R1'] = gzip.open(splitR1File,'w')
+	tempFiles[prefix]['R2'] = gzip.open(splitR2File,'w')
+	tempR1files.append(splitR1File)
+	tempR2files.append(splitR2File)
+    return tempFiles, tempR1files, tempR2files
 
-def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
-            retainN, barcodeCutOff, threads, constant):
+def splitFiles(outputprefix, inFastq1, inFastq2, n, idxBase, constant):
+    tempFiles, tempR1files, tempR2files = openTempFile(n, outputprefix)
+    counter = 0
+    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
+	for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
+	    counter += 1
+	    idLeft, seqLeft, qualLeft = read1
+	    idRight, seqRight, qualRight = read2
+	    prefix = seqLeft[:n]
+	    if seqLeft[idxBase:(idxBase + len(constant))] == constant and 'N' not in prefix:
+		tempFiles[prefix]['R1'].write('@%s\n%s\n+\n%s\n' %(idLeft, seqLeft, qualLeft))
+		tempFiles[prefix]['R2'].write('@%s\n%s\n+\n%s\n' %(idRight, seqRight, qualRight))
+	    if counter % 1000000 == 0:
+		stderr.write('Parsed %i records\n' %counter)
+    [prefix[key].close() for prefix in tempFiles.values() for key in prefix]
+    print 'closed all files'
+    return tempR1files, tempR2files
+
+def writeFile(read1, read2, leftReads, rightReads, outClusterCount):
+    for left, right in zip(list(leftReads),list(rightReads)):
+	assert left.split(' ')[0] == right.split(' ')[0], 'Wrong order pairs!!'
+	outClusterCount += 1
+	read1.write(left)
+	read2.write(right)
+    return outClusterCount
+
+def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant):
     """
     main function:
         controlling work flow
@@ -302,14 +316,47 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     stderr.write( '[%s]     threads:                           %i\n' %(programname, threads))
     stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,minReadCount))
     stderr.write( '[%s]     outputPrefix:                      %s\n' %(programname,outputprefix))
-    stderr.write( '[%s]     retaining N-containing sequence:   %r\n' %(programname,retainN))
     stderr.write( '[%s]     using constant regions:   %s\n' %(programname,constant))
     
     # divide reads into subclusters
-    clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads, constant)
+    tempR1files, tempR2files = splitFiles(outputprefix, inFastq1, inFastq2, 4, idxBase, constant)
+    read1File = outputprefix + '_R1_001.fastq.gz'
+    read2File = outputprefix + '_R2_001.fastq.gz'
+    outClusterCount = 0
+    barcodeCount = np.array(0)
+    barcode_family = 0
+
+    #start writing to new file 
+    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
+	bar =  progressbar.ProgressBar(maxval=len(tempR1files),  
+	    widgets=[progressbar.Bar('=', '[', ']'), 
+		    ' ', progressbar.Percentage()])
+	bar.start()
+	status = 0
+	for inFastq1, inFastq2 in zip(tempR1files, tempR2files):
+	    if os.path.getsize(inFastq1) > 0:
+		left, right, bcc, barcode_family_count = clustering(outputprefix, inFastq1, inFastq2, idxBase, 
+				    minReadCount, barcodeCutOff, threads, constant)
+		barcodeCount = np.append(barcodeCount,bcc)
+		barcode_family += barcode_family_count
+		if left != 0:
+		    outClusterCount = writeFile(read1, read2, left, right, outClusterCount)
+	    os.remove(inFastq1)
+	    os.remove(inFastq2)
+	    status += 1
+	    bar.update(status)
+    bar.finish()
+
+    stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,barcode_family))
+    # ending processes, and plot barcode count
+    p = plotBCdistribution(barcodeCount[barcodeCount > 0], outputprefix)        
+    stderr.write('[%s] Finished writing error free reads\n' %programname)
+    stderr.write('[%s]     read1:            %s\n' %(programname, read1File))
+    stderr.write('[%s]     read2:            %s\n' %(programname, read2File))
+    stderr.write('[%s]     output clusters:  %i\n' %(programname, outClusterCount))
     stderr.write('[%s]     time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
         
 if __name__ == '__main__':
-    outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads, constant = getOptions()
-    main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, retainN, barcodeCutOff, threads, constant)
+    outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant = getOptions()
+    main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant)
