@@ -107,13 +107,17 @@ def concensusSeq(seqList, qualList, positions):
         assertion: all seq in seqlist should have same length (see function: selectSeqLength)
     return a consensus sequence and the mean quality line (see function: calculateConcensusBase)
     """
-    concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos) for pos in positions])
-    bases, quals = zip(*concensusPosition)
-    quality = np.array(quals,dtype=np.int64)
-    quality[quality<minQ] = minQ
-    quality[quality > maxQ] = maxQ
-    sequence = ''.join(list(bases))
-    quality = ''.join(map(chr,quality))
+    if len(seqList) > 1:
+        concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos) for pos in positions])
+	bases, quals = zip(*concensusPosition)
+	quality = np.array(quals,dtype=np.int64)
+	quality[quality<minQ] = minQ
+	quality[quality > maxQ] = maxQ
+	sequence = ''.join(list(bases))
+	quality = ''.join(map(chr,quality))
+    else:
+	sequence = seqList[0]
+	quality = qualList[0]
     return sequence, quality
 
 
