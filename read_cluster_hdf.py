@@ -221,7 +221,7 @@ def readClustering(read1, read2, idxBase, barcodeCutOff, constant, h5file, n, ba
 	try:
 	    table = h5file[prefix][barcode]
 	except KeyError:
-	    table = h5file[prefix].create_dataset(barcode, shape=(20,4),maxshape=(100,4), dtype='S256')
+	    table = h5file[prefix].create_dataset(barcode, shape=(30,4),maxshape=(100,4), dtype='S256')
 	i = barcode_count[barcode]
 	table[i,:] = np.array([seqLeft, seqRight,''.join(map(chr,qualLeft)),''.join(map(chr,qualRight))])
 	barcode_count[barcode] += 1
@@ -234,6 +234,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     barcode_count = {}
     barcodeCounts = []
     i = 0
+    outClusterCount = 0
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2, \
 	    h5py.File(hdf_name,'a') as h5file:
 	for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
@@ -244,11 +245,11 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
 		sys.stderr.write('Parsed: %i read sequence\n' %i)
 	
     with h5py.File(hdf_name,'r') as h5file:
-        paths = []
 	counter = Manager().Value('i',0)
         barcode_family_count = 0
 	for prefix in h5file.iterkeys():
 	    group = h5file.get(prefix)
+	    paths = []
 	    for index in group.iterkeys():
 		table = group[index].value
 		family_size = table[table[:,0]!=''].shape[0]
@@ -257,22 +258,22 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
 		if family_size > minReadCount:
 		    path = prefix + '/' + index
 		    paths.append(path)
-    # From index library, generate error free reads
-    # using multicore to process read clusters
-    args = [(path, hdf_name, counter, minReadCount) for path in paths]
-    pool = Pool(threads)
-    #processes = pool.map_async(errorFreeReads, args)
-    #results = processes.get()
-    results = map(errorFreeReads, args)
-    pool.close()
-    pool.join()
-    results = filter(None, results)
-    # since some cluster that do not have sufficient reads
-    # will return None, results need to be filtered
-    left, right = zip(*results)
-    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
-	outClusterCount = 0
-	outClusterCount = writeFile(read1, read2, left, right, outClusterCount)
+
+	    # To reduce memory use, this fragments is moved in to every prefix
+	    # From index library, generate error free reads
+	    # using multicore to process read clusters
+	    args = [(path, hdf_name, counter, minReadCount) for path in paths]
+	    pool = Pool(threads)
+	    processes = pool.map_async(errorFreeReads, args)
+	    results = processes.get()
+	    pool.close()
+	    pool.join()
+	    # since some cluster that do not have sufficient reads
+	    # will return None, results need to be filtered
+	    if len(results) > 0:
+		left, right = zip(*results)
+		with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
+		    outClusterCount = writeFile(read1, read2, left, right, outClusterCount)
     stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,barcode_family_count))
 
     return barcodeCounts,outClusterCount
