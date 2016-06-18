@@ -232,7 +232,7 @@ def plotBCdistribution(barcodeCount, outputprefix):
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant):
     barcodeDict = Manager().dict({})
     lock = Manager().Lock()
-    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
+    with open(inFastq1,'rb') as fq1, open(inFastq2,'rb') as fq2:
 	pool = Pool(threads)
 	for read1, read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
 	    args = (read1, read2,barcodeDict, idxBase, barcodeCutOff, constant, lock)
@@ -265,11 +265,11 @@ def openTempFile(n,outputprefix):
     tempR2files = []
     for splitCode in product('ACTG',repeat=n):
 	prefix = ''.join(splitCode)
-	splitR1File = outputprefix + '_' + prefix + '_R1_temp.fq.gz'
+	splitR1File = outputprefix + '_' + prefix + '_R1_temp.fq'
 	splitR2File = splitR1File.replace('R1','R2')
 	tempFiles[prefix] = {}
-	tempFiles[prefix]['R1'] = gzip.open(splitR1File,'w')
-	tempFiles[prefix]['R2'] = gzip.open(splitR2File,'w')
+	tempFiles[prefix]['R1'] = open(splitR1File,'w')
+	tempFiles[prefix]['R2'] = open(splitR2File,'w')
 	tempR1files.append(splitR1File)
 	tempR2files.append(splitR2File)
     return tempFiles, tempR1files, tempR2files
@@ -309,6 +309,7 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff,
         3. writing concensus sequence to files
     """
     start = time.time()
+    n_prefix = 3
 
     #print out parameters
     stderr.write( '[%s] Using parameters: \n' %(programname))
@@ -316,10 +317,12 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff,
     stderr.write( '[%s]     threads:                           %i\n' %(programname, threads))
     stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,minReadCount))
     stderr.write( '[%s]     outputPrefix:                      %s\n' %(programname,outputprefix))
-    stderr.write( '[%s]     using constant regions:   %s\n' %(programname,constant))
+    stderr.write( '[%s]     using constant regions:            %s\n' %(programname,constant))
+    stderr.write( '[%s]     using N prefix to split:           %i\n' %(programname,n_prefix))
+
     
     # divide reads into subclusters
-    tempR1files, tempR2files = splitFiles(outputprefix, inFastq1, inFastq2, 4, idxBase, constant)
+    tempR1files, tempR2files = splitFiles(outputprefix, inFastq1, inFastq2, n_prefix, idxBase, constant)
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
     outClusterCount = 0

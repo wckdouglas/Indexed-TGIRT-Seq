@@ -225,7 +225,7 @@ def readClustering(read1, read2, idxBase, barcodeCutOff, constant, h5file, n, ba
 	try:
 	    table = h5file[prefix][barcode]
 	except KeyError:
-	    table = h5file[prefix].create_dataset(barcode, shape=(30,4),maxshape=(100,4), dtype='S256')
+	    table = h5file[prefix].create_dataset(barcode, shape=(500,4),maxshape=(1000,4), dtype='S256')
 	i = barcode_count[barcode]
 	table[i,:] = np.array([seqLeft, seqRight,''.join(map(chr,qualLeft)),''.join(map(chr,qualRight))])
 	barcode_count[barcode] += 1
@@ -245,7 +245,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
 	    i += 1
 	    barcode_count = readClustering(read1,read2, idxBase, barcodeCutOff,  
 		    constant, h5file, prefix_length, barcode_count) 
-	    if i % 100000 == 0:
+	    if i % 1000000 == 0:
 		sys.stderr.write('Parsed: %i read sequence\n' %i)
 	
     with h5py.File(hdf_name,'r') as h5file:
