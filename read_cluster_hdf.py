@@ -192,11 +192,11 @@ def plotBCdistribution(barcodeCount, outputprefix):
 
 def open_temp_hdf(n,outputprefix):
     hdf_name = outputprefix  + '.h5'	
-    with h5py.File(hdf_name,'w') as h5file:
-	for splitCode in product('ACTG',repeat=n):
-	    prefix = ''.join(splitCode)
-	    h5file.create_group(prefix)
-    return hdf_name
+    h5file = h5py.File(hdf_name,'w', libver='latest') 
+    for splitCode in product('ACTG',repeat=n):
+	prefix = ''.join(splitCode)
+	h5file.create_group(prefix)
+    return h5file
 
 
 def readClustering(read1, read2, idxBase, barcodeCutOff, constant, h5file, n, barcode_count):
@@ -234,19 +234,19 @@ def readClustering(read1, read2, idxBase, barcodeCutOff, constant, h5file, n, ba
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, 
 	threads, constant, read1File, read2File):
     prefix_length = 4
-    hdf_name = open_temp_hdf(prefix_length, outputprefix)
     barcode_count = {}
     barcodeCounts = []
     i = 0
     outClusterCount = 0
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2, \
-	    h5py.File(hdf_name,'a') as h5file:
+	    open_temp_hdf(prefix_length, outputprefix) as h5file:
 	for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
 	    i += 1
 	    barcode_count = readClustering(read1,read2, idxBase, barcodeCutOff,  
 		    constant, h5file, prefix_length, barcode_count) 
 	    if i % 1000000 == 0:
 		sys.stderr.write('Parsed: %i read sequence\n' %i)
+	hdf_name = h5file.filename
 	
     with h5py.File(hdf_name,'r') as h5file:
 	counter = Manager().Value('i',0)
