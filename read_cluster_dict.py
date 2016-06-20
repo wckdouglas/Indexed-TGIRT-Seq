@@ -192,12 +192,11 @@ def hammingDistance(expected_constant, constant_region):
     dist = hamming(list(expected_constant),list(constant_region))
     return dist
 
-def readClustering(args):
+def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, lock, constant):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idxBases/ of read 1 
     """
-    read1, read2, barcodeDict, idxBase, barcodeCutOff, lock, constant = args
     idLeft, seqLeft, qualLeft = read1
     idRight, seqRight, qualRight = read2
     assert idLeft.split(' ')[0] == idRight.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(idRight, idLeft)
@@ -259,7 +258,10 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     lock = manager.Lock()
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         pool = Pool(threads)
-        result = pool.map(readClustering,[(read1,read2,barcodeDict, idxBase, barcodeCutOff, lock, constant) for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))])
+	for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
+	    arg = (read1,read2,barcodeDict, idxBase, barcodeCutOff, lock, constant)
+	    process = pool.apply_async(readClustering, args = arg)
+	    process.get()
         pool.close()
         pool.join()
     stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
@@ -269,7 +271,8 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     # using multicore to process read clusters
     counter = manager.Value('i',0)
     pool = Pool(threads)
-    results = map(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, lock) for index in barcodeDict.keys()])
+    processes = pool.imap_unordered(errorFreeReads, [(item, index, counter, minReadCount, lock) for index, item in barcodeDict.items()])
+    results = [p for p in processes] 
     pool.close()
     pool.join()
     results = filter(None,  results)
