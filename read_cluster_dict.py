@@ -256,14 +256,18 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     manager = Manager()
     barcodeDict = manager.dict({})
     lock = manager.Lock()
+    read_num = 0
+    pool = Pool(threads)
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
-        pool = Pool(threads)
 	for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
 	    arg = (read1,read2,barcodeDict, idxBase, barcodeCutOff, lock, constant)
 	    process = pool.apply_async(readClustering, args = arg)
 	    process.get()
-        pool.close()
-        pool.join()
+            read_num += 1
+            if read_num % 10000000 == 0:
+                stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
+    pool.close()
+    pool.join()
     stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
     p = plotBCdistribution(barcodeDict, outputprefix)
 
