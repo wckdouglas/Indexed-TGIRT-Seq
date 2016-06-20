@@ -275,7 +275,8 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     # using multicore to process read clusters
     counter = manager.Value('i',0)
     pool = Pool(threads)
-    processes = pool.imap_unordered(errorFreeReads, [(item, index, counter, minReadCount, lock) for index, item in barcodeDict.items()])
+    iterator = iter(barcodeDict.items())
+    processes = pool.imap_unordered(errorFreeReads, [(item, index, counter, minReadCount, lock) for index, item in iterator])
     results = [p for p in processes] 
     pool.close()
     pool.join()
