@@ -196,8 +196,8 @@ def open_temp_hdf(n,outputprefix):
     for splitCode in product('ACTG',repeat=n):
 	prefix = ''.join(splitCode)
 	h5file.create_group(prefix)
+    print 'Created groups'
     return h5file
-
 
 def readClustering(read1, read2, idxBase, barcodeCutOff, constant, h5file, n, barcode_count):
     """
@@ -222,10 +222,10 @@ def readClustering(read1, read2, idxBase, barcodeCutOff, constant, h5file, n, ba
         seqLeft = seqLeft[idxBase+constant_length:]
         qualLeft = qualLeft[idxBase+constant_length:]
 	barcode_count.setdefault(barcode, 0)
-	try:
+	if prefix + '/' + barcode in h5file:
 	    table = h5file[prefix][barcode]
-	except KeyError:
-	    table = h5file[prefix].create_dataset(barcode, shape=(500,4),maxshape=(1000,4), dtype='S256')
+	else:
+	    table = h5file[prefix].create_dataset(barcode, shape=(500,4), dtype='S256')
 	i = barcode_count[barcode]
 	table[i,:] = np.array([seqLeft, seqRight,''.join(map(chr,qualLeft)),''.join(map(chr,qualRight))])
 	barcode_count[barcode] += 1
@@ -244,7 +244,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
 	    i += 1
 	    barcode_count = readClustering(read1,read2, idxBase, barcodeCutOff,  
 		    constant, h5file, prefix_length, barcode_count) 
-	    if i % 1000000 == 0:
+	    if i % 100000 == 0:
 		sys.stderr.write('Parsed: %i read sequence\n' %i)
 	hdf_name = h5file.filename
 	
