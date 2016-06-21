@@ -129,15 +129,15 @@ def concensusSeq(seqList, qualList, positions):
     """
     if len(seqList) > 1:
         concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos) for pos in positions])
-	bases, quals = zip(*concensusPosition)
-	quality = np.array(quals,dtype=np.int64)
-	quality[quality<minQ] = minQ
-	quality[quality > maxQ] = maxQ
-	sequence = ''.join(list(bases))
-	quality = ''.join(map(chr,quality))
+        bases, quals = zip(*concensusPosition)
+        quality = np.array(quals,dtype=np.int64)
+        quality[quality<minQ] = minQ
+        quality[quality > maxQ] = maxQ
+        sequence = ''.join(list(bases))
+        quality = ''.join(map(chr,quality))
     else:
-	sequence = seqList[0]
-	quality = qualList[0]
+        sequence = seqList[0]
+        quality = qualList[0]
     return sequence, quality
 
 def concensusPairs(reads):
@@ -182,10 +182,10 @@ def errorFreeReads(args):
         counter.value = count
         lock.release()
         leftRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
-	    %(count, index, supportedLeftReads, sequenceLeft, qualityLeft)
-	rightRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
-	    %(count, index, supportedRightReads, sequenceRight, qualityRight)
-	if count % 100000 == 0:
+            %(count, index, supportedLeftReads, sequenceLeft, qualityLeft)
+        rightRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
+            %(count, index, supportedRightReads, sequenceRight, qualityRight)
+        if count % 100000 == 0:
             stderr.write('[%s] Processed %i read clusters.\n' %(programname, count))
         return(leftRecord,rightRecord)
 
@@ -193,7 +193,7 @@ def hammingDistance(expected_constant, constant_region):
     dist = hamming(list(expected_constant),list(constant_region))
     return dist
 
-def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, constant_length, hamming_threshold):
+def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, constant_length, hamming_threshold, usable_seq):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idxBases/ of read 1
@@ -202,14 +202,15 @@ def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, 
     idRight, seqRight, qualRight = read2
     assert idLeft.split(' ')[0] == idRight.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(idRight, idLeft)
     barcode = seqLeft[:idxBase]
-    constant_region = seqLeft[idxBase:idxBase+constant_length]
-    barcodeQualmean = int(np.mean([ord(q) for q in qualLeft[:idxBase]]) - 33)
+    constant_region = seqLeft[idxBase:usable_seq]
+    barcodeQualmean = int(np.mean(map(ord,qualLeft[:idxBase]) - 33)
     if ('N' not in barcode \
             and barcodeQualmean > barcodeCutOff \
-	        and not any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']) \
-	        and hammingDistance(constant, constant_region) <= hamming_threshold):
-        seqLeft = seqLeft[idxBase+constant_length:]
-	barcodeDict[barcode].addRecord(seqRight, qualRight, seqLeft, qualLeft)
+                and not any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']) \
+                and hammingDistance(constant, constant_region) <= hamming_threshold):
+        seqLeft = seqLeft[usable_seq:]
+        qualLeft = qualLeft[usable_seq:]
+        barcodeDict[barcode].addRecord(seqRight, qualRight, seqLeft, qualLeft)
     return 0
 
 def writeFile(outputprefix, leftReads, rightReads):
@@ -228,7 +229,7 @@ def writeFile(outputprefix, leftReads, rightReads):
 
 def plotBCdistribution(barcodeDict, outputprefix):
     #plotting inspection of barcode distribution
-    barcodeCount = [barcodeDict[key].readCounts() for key in barcodeDict.keys()]
+    barcodeCount = map(lambda x: barcodeDict[x].readCounts(), barcodeDict.keys()]
     barcodeCount = np.array(barcodeCount, dtype=np.int64)
     hist, bins = np.histogram(barcodeCount[barcodeCount<50],bins=50)
     centers = (bins[:-1] + bins[1:]) / 2
@@ -254,10 +255,11 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     read_num = 0
     constant_length = len(constant)
     hamming_threshold = float(1)/constant_length
+    usable_seq = idxBase + constant_length
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
-	for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
-	    readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff, 
-		    constant, constant_length, hamming_threshold)
+        for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
+            readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
+                    constant, constant_length, hamming_threshold, usable_seq)
             read_num += 1
             if read_num % 1000000 == 0:
                 stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
