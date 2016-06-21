@@ -1,13 +1,12 @@
 #!/bin/bash
 
-PROJECT_PATH=/scratch/02727/cdw2854/plasmaDNA
-DATA_PATH=$PROJECT_PATH/rawData/combined
+PROJECT_PATH=/Users/wckdouglas/plasmaDNA
+DATA_PATH=$PROJECT_PATH/data
 RESULT_PATH=$PROJECT_PATH/splitted
-LOG_PATH=$RESULT_PATH/logs
 SUFFIX=_R1_001.fastq.gz
 PROGRAM=readClusterPairs.py
 PROGRAM=read_cluster_dict.py
-mkdir -p  $RESULT_PATH $LOG_PATH
+mkdir -p  $RESULT_PATH
 
 for FQ1 in `ls $DATA_PATH/PD-*${SUFFIX}`
 do
