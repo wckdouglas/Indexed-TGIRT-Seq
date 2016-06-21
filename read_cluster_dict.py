@@ -255,7 +255,6 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     manager = Manager()
     barcodeDict = {}
     read_num = 0
-    pool = Pool(threads)
     constant_length = len(constant)
     hamming_threshold = float(1)/constant_length
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
@@ -265,8 +264,6 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
             read_num += 1
             if read_num % 1000000 == 0:
                 stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
-    pool.close()
-    pool.join()
     stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
     p = plotBCdistribution(barcodeDict, outputprefix)
 
@@ -277,7 +274,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     lock = manager.Lock()
     dict_iter = barcodeDict.iteritems()
     iterator = iter([(seq_record, index, counter, minReadCount, lock) for index, seq_record in dict_iter])
-    processes = pool.imap_unordered(errorFreeReads, iterator))
+    processes = pool.imap_unordered(errorFreeReads, iterator)
     results = [p for p in processes]
     pool.close()
     pool.join()
