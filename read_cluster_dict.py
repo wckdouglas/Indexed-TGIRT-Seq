@@ -229,7 +229,7 @@ def writeFile(outputprefix, leftReads, rightReads):
 
 def plotBCdistribution(barcodeDict, outputprefix):
     #plotting inspection of barcode distribution
-    barcodeCount = map(lambda x: barcodeDict[x].readCounts(), barcodeDict.keys()]
+    barcodeCount = map(lambda x: barcodeDict[x].readCounts(), barcodeDict.keys())
     barcodeCount = np.array(barcodeCount, dtype=np.int64)
     hist, bins = np.histogram(barcodeCount[barcodeCount<50],bins=50)
     centers = (bins[:-1] + bins[1:]) / 2
