@@ -192,7 +192,7 @@ def hammingDistance(expected_constant, constant_region):
     dist = hamming(list(expected_constant),list(constant_region))
     return dist
 
-def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, lock, constant, constant_length, hamming_threshold):
+def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, constant_length, hamming_threshold):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idxBases/ of read 1
@@ -208,11 +208,11 @@ def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, lock, cons
 	        and not any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']) \
 	        and hammingDistance(constant, constant_region) <= hamming_threshold):
         seqLeft = seqLeft[idxBase+constant_length:]
-        lock.acquire()
-        record = barcodeDict.get(barcode,seqRecord())
-        record.addRecord(seqRight, qualRight, seqLeft, qualLeft)
-        barcodeDict[barcode] = record
-        lock.release()
+#        record = barcodeDict.get(barcode,seqRecord())
+#        record.addRecord(seqRight, qualRight, seqLeft, qualLeft)
+#        barcodeDict[barcode] = record
+	barcodeDict.setdefault(barcode, seqRecord())
+	barcodeDict[barcode].addRecord(seqRight, qualRight, seqLeft, qualLeft)
     return 0
 
 def writeFile(outputprefix, leftReads, rightReads):
@@ -253,22 +253,17 @@ def plotBCdistribution(barcodeDict, outputprefix):
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant):
     manager = Manager()
-    barcodeDict = manager.dict({})
-    lock = manager.Lock()
+    barcodeDict = {}
     read_num = 0
-    pool = Pool(threads)
     constant_length = len(constant)
     hamming_threshold = float(1)/constant_length
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
 	for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
-	    arg = (read1,read2,barcodeDict, idxBase, barcodeCutOff, lock, constant, constant_length, hamming_threshold)
-	    process = pool.apply_async(readClustering, args = arg)
-	    process.get()
+	    readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff, 
+		    constant, constant_length, hamming_threshold)
             read_num += 1
             if read_num % 1000000 == 0:
                 stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
-    pool.close()
-    pool.join()
     stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
     p = plotBCdistribution(barcodeDict, outputprefix)
 
@@ -276,7 +271,10 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     # using multicore to process read clusters
     counter = manager.Value('i',0)
     pool = Pool(threads)
-    processes = pool.imap_unordered(errorFreeReads, [(barcodeDict[index], index, counter, minReadCount, lock) for index in barcodeDict.keys()])
+    lock = manager.Lock()
+    dict_iter = barcodeDict.iteritems()
+    iterator = iter([(seq_record, index, counter, minReadCount, lock) for index, seq_record in dict_iter])
+    processes = pool.imap_unordered(errorFreeReads, iterator)
     results = [p for p in processes]
     pool.close()
     pool.join()
