@@ -16,6 +16,7 @@ import os
 from itertools import izip
 from multiprocessing import Pool, Manager
 from scipy.spatial.distance import hamming
+from collections import defaultdict
 sns.set_style('white')
 programname = os.path.basename(sys.argv[0]).split('.')[0]
 minQ = 33
@@ -208,10 +209,6 @@ def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, 
 	        and not any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']) \
 	        and hammingDistance(constant, constant_region) <= hamming_threshold):
         seqLeft = seqLeft[idxBase+constant_length:]
-#        record = barcodeDict.get(barcode,seqRecord())
-#        record.addRecord(seqRight, qualRight, seqLeft, qualLeft)
-#        barcodeDict[barcode] = record
-	barcodeDict.setdefault(barcode, seqRecord())
 	barcodeDict[barcode].addRecord(seqRight, qualRight, seqLeft, qualLeft)
     return 0
 
@@ -253,7 +250,7 @@ def plotBCdistribution(barcodeDict, outputprefix):
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant):
     manager = Manager()
-    barcodeDict = {}
+    barcodeDict = defaultdict(seqRecord)
     read_num = 0
     constant_length = len(constant)
     hamming_threshold = float(1)/constant_length
