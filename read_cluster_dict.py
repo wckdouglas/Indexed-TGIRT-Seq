@@ -203,11 +203,11 @@ def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, 
     assert idLeft.split(' ')[0] == idRight.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(idRight, idLeft)
     barcode = seqLeft[:idxBase]
     constant_region = seqLeft[idxBase:usable_seq]
-    barcodeQualmean = int(np.mean(map(ord,qualLeft[:idxBase]) - 33)
+    barcodeQualmean = int(np.mean(map(ord,qualLeft[:idxBase]) - 33))
     if ('N' not in barcode \
             and barcodeQualmean > barcodeCutOff \
-                and not any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']) \
-                and hammingDistance(constant, constant_region) <= hamming_threshold):
+            and not any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']) \
+            and hammingDistance(constant, constant_region) <= hamming_threshold):
         seqLeft = seqLeft[usable_seq:]
         qualLeft = qualLeft[usable_seq:]
         barcodeDict[barcode].addRecord(seqRight, qualRight, seqLeft, qualLeft)
