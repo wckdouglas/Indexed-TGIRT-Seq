@@ -65,8 +65,6 @@ def getOptions():
         help="how many base in 5' end as index? (default: 13)")
     parser.add_argument('-q', '--barcodeCutOff', type=int, default=30,
         help="Average base calling quality for barcode sequence (default=30)")
-    parser.add_argument("-t", "--threads", type=int, default = 1,
-        help="Threads to use (default: 1)")
     parser.add_argument("-c", "--constant_region", default='',
             help="Constant sequence after tags (default: '')")
     args = parser.parse_args()
@@ -76,9 +74,8 @@ def getOptions():
     idxBase = args.idxBase
     minReadCount = args.cutoff
     barcodeCutOff = args.barcodeCutOff
-    threads = args.threads
     constant = args.constant_region
-    return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant
+    return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant
 
 def qual2Prob(q):
     '''
@@ -244,7 +241,7 @@ def plotBCdistribution(barcodeDict, outputprefix):
     stderr.write('Plotted %s.\n' %figurename)
     return 0
 
-def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant):
+def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant):
     barcodeDict = defaultdict(seqRecord)
     read_num = 0
     constant_length = len(constant)
@@ -268,7 +265,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         dict_iter = barcodeDict.iteritems()
         for index, seq_record in dict_iter:
-            counter = errorFreeReads(seq_record, index, counter, minReadCount, read1, read2) 
+            counter = errorFreeReads(seq_record, index, counter, minReadCount, read1, read2)
 #    # since some cluster that do not have sufficient reads
 #    # will return None, results need to be filtered
     stderr.write('[%s] Extracted error free reads\n' %(programname))
@@ -282,7 +279,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     return 0
 
 def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
-        barcodeCutOff, threads, constant):
+        barcodeCutOff, constant):
     """
     main function:
         controlling work flow
@@ -295,16 +292,15 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     #print out parameters
     stderr.write( '[%s] Using parameters: \n' %(programname))
     stderr.write( '[%s]     indexed bases:                     %i\n' %(programname,idxBase))
-    stderr.write( '[%s]     threads:                           %i\n' %(programname, threads))
     stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,minReadCount))
     stderr.write( '[%s]     outputPrefix:                      %s\n' %(programname,outputprefix))
     stderr.write( '[%s]     using constant regions:   %s\n' %(programname,constant))
 
     # divide reads into subclusters
-    clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant)
+    clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant)
     stderr.write('[%s]     time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
 
 if __name__ == '__main__':
-    outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant = getOptions()
-    main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant)
+    outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant = getOptions()
+    main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant)
