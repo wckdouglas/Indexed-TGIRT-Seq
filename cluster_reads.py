@@ -18,16 +18,14 @@ class seqRecord:
         self.qualListRight = []
         self.seqListLeft = []
         self.qualListLeft = []
+        self.member_count = 0
 
     def addRecord(self, seqRight, qualRight, seqLeft, qualLeft):
         self.seqListRight.append(seqRight)
         self.qualListRight.append(qualRight)
         self.seqListLeft.append(seqLeft)
         self.qualListLeft.append(qualLeft)
-
-    def readCounts(self):
-        assert len(self.seqListLeft) == len(self.seqListRight), 'Not equal pairs'
-        return len(self.seqListRight)
+        self.member_count += 1
 
     def readLengthRight(self):
         return np.array([len(seq) for seq in self.seqListRight],dtype=np.int64)
@@ -80,7 +78,7 @@ def calculateConcensusBase(arg):
     return concensusBase, quality
 
 def concensusSeq(seqList, qualList, positions):
-    """given a list of sequences, a list of quality and sequence length. 
+    """given a list of sequences, a list of quality and sequence length.
         assertion: all seq in seqlist should have same length (see function: selectSeqLength)
     return a consensus sequence and the mean quality line (see function: calculateConcensusBase)
     """
@@ -101,9 +99,8 @@ def hammingDistance(expected_constant, constant_region):
     dist = hamming(list(expected_constant),list(constant_region))
     return dist
 
-def plotBCdistribution(barcodeDict, outputprefix):
+def plotBCdistribution(barcodeCount, outputprefix):
     #plotting inspection of barcode distribution
-    barcodeCount = map(lambda x: barcodeDict[x].readCounts(), barcodeDict.keys())
     barcodeCount = np.array(barcodeCount, dtype=np.int64)
     hist, bins = np.histogram(barcodeCount[barcodeCount<50],bins=50)
     centers = (bins[:-1] + bins[1:]) / 2

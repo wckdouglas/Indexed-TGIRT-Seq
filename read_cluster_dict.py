@@ -57,7 +57,7 @@ def concensusPairs(reads):
     # get concensus right reads first
     sequenceRight, qualityRight = concensusSeq(reads.seqListRight, reads.qualListRight, range(np.unique(reads.readLengthRight())[0]))
     assert len(sequenceRight) == len(qualityRight), 'Wrong concensus sequence and quality!'
-    return sequenceLeft, qualityLeft, len(reads.seqListLeft), sequenceRight, qualityRight, len(reads.seqListRight)
+    return sequenceLeft, qualityLeft, sequenceRight, qualityRight
 
 def errorFreeReads(readCluster, index, counter, minReadCount, read1, read2):
     """
@@ -68,13 +68,13 @@ def errorFreeReads(readCluster, index, counter, minReadCount, read1, read2):
                   3. calculateConcensusBase
     """
     # skip if not enough sequences to perform voting
-    if readCluster is not None and readCluster.readCounts() > minReadCount:
-        sequenceLeft, qualityLeft, supportedLeftReads, sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster)
+    if readCluster is not None and readCluster.member_count > minReadCount:
+        sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(readCluster)
         counter += 1
         leftRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
-            %(counter, index, supportedLeftReads, sequenceLeft, qualityLeft)
+            %(counter, index, readCluster.member_count, sequenceLeft, qualityLeft)
         rightRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
-            %(counter, index, supportedRightReads, sequenceRight, qualityRight)
+            %(counter, index, readCluster.member_count, sequenceRight, qualityRight)
         read1.write(leftRecord)
         read2.write(rightRecord)
         if counter % 100000 == 0:
@@ -130,7 +130,8 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
             if read_num % 1000000 == 0:
                 stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
     stderr.write('[%s] Extracted: %i barcodes sequence\n' %(programname,len(barcodeDict.keys())))
-    p = plotBCdistribution(barcodeDict, outputprefix)
+    barcodeCount = map(lambda x: barcodeDict[x].member_count, barcodeDict.keys())
+    p = plotBCdistribution(barcodeCount, outputprefix)
 
     # From index library, generate error free reads
     # using multicore to process read clusters
