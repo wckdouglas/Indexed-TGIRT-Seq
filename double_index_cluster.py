@@ -1,3 +1,4 @@
+
 #!/bin/env python
 
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
@@ -101,7 +102,7 @@ def readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
     barcode_qual_mean_left = int(np.mean(map(ord,qualLeft[:idxBase])) - 33)
     barcode_qual_mean_right = int(np.mean(map(ord,qualRight[:idxBase])) - 33)
     index = barcode_left + '/' + barcode_right
-    if ('N' not in barcode \
+    if ('N' not in index \
             and np.min([barcode_qual_mean_right, barcode_qual_mean_left]) > barcodeCutOff \
             and not any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']) \
             and hammingDistance(constant_right_region, constant_right) <= hamming_right_threshold \
@@ -110,7 +111,7 @@ def readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
         qualLeft = qualLeft[usable_left_seq:]
         seqRight = seqRight[usable_right_seq:]
         qualRight = qualRight[usable_right_seq:]
-        barcodeDict[barcode].addRecord(seqRight, qualRight, seqLeft, qualLeft)
+        barcodeDict[index].addRecord(seqRight, qualRight, seqLeft, qualLeft)
         return 1
     return 0
 
