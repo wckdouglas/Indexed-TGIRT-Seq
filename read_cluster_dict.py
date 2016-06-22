@@ -13,8 +13,7 @@ import glob
 import gzip
 import time
 import os
-from itertools import izip
-from multiprocessing import Pool, Manager
+from itertools import izip, imap
 from scipy.spatial.distance import hamming
 from collections import defaultdict
 sns.set_style('white')
@@ -173,24 +172,19 @@ def errorFreeReads(args):
     #if readCluster.readCounts() > minReadCount:
     #    reads = filterRead(readCluster)
     # skip if not enough sequences to perform voting
-    readCluster, index, counter, minReadCount, read1, read2, lock = args
+    readCluster, index, counter, minReadCount, read1, read2 = args
     if readCluster is not None and readCluster.readCounts() > minReadCount:
         sequenceLeft, qualityLeft, supportedLeftReads, sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster)
-        lock.acquire()
-        count = counter.value
-        count += 1
-        counter.value = count
+        counter += 1
         leftRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
-            %(count, index, supportedLeftReads, sequenceLeft, qualityLeft)
+            %(counter, index, supportedLeftReads, sequenceLeft, qualityLeft)
         rightRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
-            %(count, index, supportedRightReads, sequenceRight, qualityRight)
-        assert left.split(' ')[0] == right.split(' ')[0], 'Wrong order pairs!!'
+            %(counter, index, supportedRightReads, sequenceRight, qualityRight)
         read1.write(leftRecord)
         read2.write(rightRecord)
-        lock.release()
-        if count % 100000 == 0:
+        if counter % 100000 == 0:
             stderr.write('[%s] Processed %i read clusters.\n' %(programname, count))
-        return(leftRecord,rightRecord)
+    return 0
 
 def hammingDistance(expected_constant, constant_region):
     dist = hamming(list(expected_constant),list(constant_region))
@@ -214,6 +208,7 @@ def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, 
         seqLeft = seqLeft[usable_seq:]
         qualLeft = qualLeft[usable_seq:]
         barcodeDict[barcode].addRecord(seqRight, qualRight, seqLeft, qualLeft)
+        return 1
     return 0
 
 def writeFile(outputprefix, leftReads, rightReads):
@@ -253,7 +248,6 @@ def plotBCdistribution(barcodeDict, outputprefix):
     return 0
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant):
-    manager = Manager()
     barcodeDict = defaultdict(seqRecord)
     read_num = 0
     constant_length = len(constant)
@@ -271,33 +265,23 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
 
     # From index library, generate error free reads
     # using multicore to process read clusters
-    counter = manager.Value('i',0)
-    pool = Pool(threads)
-    lock = manager.Lock()
+    counter = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         dict_iter = barcodeDict.iteritems()
-        iterator = iter([(seq_record, index, counter, minReadCount, read1, read2 lock) for index, seq_record in dict_iter])
-        processes = pool.imap_unordered(errorFreeReads, iterator)
-        results = [p for p in processes]
-    pool.close()
-    pool.join()
-#    results = filter(None,  results)
+        iterator = iter([(seq_record, index, counter, minReadCount, read1, read2) for index, seq_record in dict_iter])
+        imap(errorFreeReads,iterator)
 #    # since some cluster that do not have sufficient reads
 #    # will return None, results need to be filtered
-#    if (len(results) == 0):
-#        sys.exit('[%s] No concensus clusters!! \n' %(programname))
-#    left, right = zip(*results)
     stderr.write('[%s] Extracted error free reads\n' %(programname))
     # use two cores for parallel writing file
-#    read1File, read2File = writeFile(outputprefix, list(left), list(right))
 
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)
     stderr.write('[%s]     read1:            %s\n' %(programname, read1File))
     stderr.write('[%s]     read2:            %s\n' %(programname, read2File))
-    stderr.write('[%s]     output clusters:  %i\n' %(programname, len(left)))
+    stderr.write('[%s]     output clusters:  %i\n' %(programname, counter))
     return 0
 
 def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
