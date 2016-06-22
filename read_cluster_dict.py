@@ -173,18 +173,21 @@ def errorFreeReads(args):
     #if readCluster.readCounts() > minReadCount:
     #    reads = filterRead(readCluster)
     # skip if not enough sequences to perform voting
-    readCluster, index, counter, minReadCount, lock = args
+    readCluster, index, counter, minReadCount, read1, read2, lock = args
     if readCluster is not None and readCluster.readCounts() > minReadCount:
         sequenceLeft, qualityLeft, supportedLeftReads, sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster)
         lock.acquire()
         count = counter.value
         count += 1
         counter.value = count
-        lock.release()
         leftRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
             %(count, index, supportedLeftReads, sequenceLeft, qualityLeft)
         rightRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
             %(count, index, supportedRightReads, sequenceRight, qualityRight)
+        assert left.split(' ')[0] == right.split(' ')[0], 'Wrong order pairs!!'
+        read1.write(leftRecord)
+        read2.write(rightRecord)
+        lock.release()
         if count % 100000 == 0:
             stderr.write('[%s] Processed %i read clusters.\n' %(programname, count))
         return(leftRecord,rightRecord)
@@ -271,21 +274,24 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     counter = manager.Value('i',0)
     pool = Pool(threads)
     lock = manager.Lock()
-    dict_iter = barcodeDict.iteritems()
-    iterator = iter([(seq_record, index, counter, minReadCount, lock) for index, seq_record in dict_iter])
-    processes = pool.imap_unordered(errorFreeReads, iterator)
-    results = [p for p in processes]
+    read1File = outputprefix + '_R1_001.fastq.gz'
+    read2File = outputprefix + '_R2_001.fastq.gz'
+    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
+        dict_iter = barcodeDict.iteritems()
+        iterator = iter([(seq_record, index, counter, minReadCount, read1, read2 lock) for index, seq_record in dict_iter])
+        processes = pool.imap_unordered(errorFreeReads, iterator)
+        results = [p for p in processes]
     pool.close()
     pool.join()
-    results = filter(None,  results)
-    # since some cluster that do not have sufficient reads
-    # will return None, results need to be filtered
-    if (len(results) == 0):
-        sys.exit('[%s] No concensus clusters!! \n' %(programname))
-    left, right = zip(*results)
+#    results = filter(None,  results)
+#    # since some cluster that do not have sufficient reads
+#    # will return None, results need to be filtered
+#    if (len(results) == 0):
+#        sys.exit('[%s] No concensus clusters!! \n' %(programname))
+#    left, right = zip(*results)
     stderr.write('[%s] Extracted error free reads\n' %(programname))
     # use two cores for parallel writing file
-    read1File, read2File = writeFile(outputprefix, list(left), list(right))
+#    read1File, read2File = writeFile(outputprefix, list(left), list(right))
 
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)
