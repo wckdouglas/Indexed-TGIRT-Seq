@@ -1,13 +1,8 @@
 #!/bin/env python
 
-import matplotlib
-matplotlib.use('Agg')
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from sys import stderr
-from scipy.spatial.distance import hamming
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 import sys
 import argparse
 import glob
@@ -17,11 +12,8 @@ import os
 from itertools import izip, product
 from multiprocessing import Pool, Manager
 import h5py 
-sns.set_style('white')
+from cluster_reads import *
 programname = os.path.basename(sys.argv[0]).split('.')[0]
-minQ = 33
-maxQ = 73
-
 #======================  starting functions =============================
 def getOptions():
     '''reading input 
@@ -57,70 +49,6 @@ def getOptions():
     constant = args.constant_region
     return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, threads, constant
 
-def hammingDistance(expected_constant, constant_region):
-    dist = hamming(list(expected_constant),list(constant_region))
-    return dist
-
-def qual2Prob(q):
-    ''' 
-    Given a q list,
-    return a list of prob
-    '''
-    return np.power(10, np.true_divide(-q,10))
-
-def calculatePosterior(guessBase, columnBases, qualities):
-    qualHit = qualities[columnBases==guessBase]
-    qualMissed = qualities[columnBases!=guessBase]
-    if len(qualMissed) > 0:
-        hit = np.prod(1- qual2Prob(qualHit)) if len(qualHit) > 0 else 0
-        missed = np.prod(np.true_divide(qual2Prob(qualMissed),3))
-        posterior = missed * hit
-    else: 
-        posterior = 1
-    return posterior
-
-def calculateConcensusBase(arg):
-    """Given a list of sequences, 
-        a list of quality line and 
-        a position, 
-    return the maximum likelihood base at the given position,
-        along with the mean quality of these concensus bases.
-    """
-    seqList, qualList, pos = arg
-    no_of_reads = len(seqList)
-    acceptable_bases = np.array(['A','C','T','G'], dtype='string')
-    columnBases = np.zeros(no_of_reads,dtype='string')
-    qualities = np.zeros(no_of_reads,dtype=np.int64)
-    for seq, qual, i  in zip(seqList, qualList, range(no_of_reads)):
-        columnBases[i] = seq[pos]
-        qualities[i] = ord(qual[pos]) - 33
-    posteriors = [calculatePosterior(guessBase, columnBases, qualities) for guessBase in acceptable_bases]
-    posteriors = np.true_divide(posteriors, np.sum(posteriors))
-    maxLikHood = np.argmax(posteriors)
-    concensusBase = acceptable_bases[maxLikHood]
-    posterior = posteriors[maxLikHood]
-    quality = -10 * np.log10(1 - posterior) + 33 if posterior < 1 else maxQ
-    return concensusBase, quality
-
-def concensusSeq(seqList, qualList, positions):
-    """given a list of sequences, a list of quality and sequence length. 
-        assertion: all seq in seqlist should have same length (see function: selectSeqLength)
-    return a consensus sequence and the mean quality line (see function: calculateConcensusBase)
-    """
-    if len(seqList) > 1:
-        concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos) for pos in positions])
-	bases, quals = zip(*concensusPosition)
-	quality = np.array(quals,dtype=np.int64)
-	quality[quality<minQ] = minQ
-	quality[quality > maxQ] = maxQ
-	sequence = ''.join(list(bases))
-	quality = ''.join(map(chr,quality))
-    else:
-	sequence = seqList[0]
-	quality = qualList[0]
-    return sequence, quality
-
-
 def concensusPairs(read_cluster_table):
     """ given a pair of reads as defined as the class: seqRecord
     return concensus sequence and mean quality of the pairs, 
@@ -137,14 +65,6 @@ def concensusPairs(read_cluster_table):
     sequenceRight, qualityRight = concensusSeq(seqListRight, qualListRight, range(len(seqListLeft[0])))
     assert len(sequenceRight) == len(qualityRight), 'Wrong concensus sequence and quality!'
     return sequenceLeft, qualityLeft, len(seqListLeft), sequenceRight, qualityRight, len(seqListRight)
-
-def selectSeqLength(readLengthArray):
-    """
-    Given a list of sequence length of a read cluster from either side of the pair,
-    select the sequence length with highest vote
-    """
-    seqlength, count = np.unique(readLengthArray, return_counts=True)
-    return seqlength[count==max(count)][0]
 
 def errorFreeReads(args):
     """
@@ -171,24 +91,6 @@ def errorFreeReads(args):
     if count % 100000 == 0:
         stderr.write('[%s] Processed %i read clusters.\n' %(programname, count))
     return (leftRecord,rightRecord)
-
-
-def plotBCdistribution(barcodeCount, outputprefix):
-    #plotting inspection of barcode distribution
-    barcodeCount = np.array(barcodeCount, dtype=np.int64)
-    num, count = np.unique(barcodeCount,return_counts=True)
-    figurename = '%s.png' %(outputprefix)
-    with sns.plotting_context('paper',font_scale=1.3):
-        p = sns.barplot(num,count, color='salmon')
-    p.set_xlabel("Number of occurence")
-    p.set_ylabel("Count of tags")
-    p.set_yscale('log',nonposy='clip')
-    p.set_title(outputprefix.split('/')[-1])
-    p.spines['right'].set_visible(False)
-    p.spines['top'].set_visible(False)
-    plt.savefig(figurename)
-    stderr.write('Plotted %s.\n' %figurename)
-    return 0
 
 def open_temp_hdf(n,outputprefix):
     hdf_name = outputprefix  + '.h5'	
