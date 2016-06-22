@@ -180,7 +180,7 @@ def errorFreeReads(readCluster, index, counter, minReadCount, read1, read2):
         read1.write(leftRecord)
         read2.write(rightRecord)
         if counter % 100000 == 0:
-            stderr.write('[%s] Processed %i read clusters.\n' %(programname, count))
+            stderr.write('[%s] Processed %i read clusters.\n' %(programname, counter))
     return counter
 
 def hammingDistance(expected_constant, constant_region):
