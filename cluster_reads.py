@@ -69,8 +69,8 @@ def calculateConcensusBase(arg):
         columnBases[i] = seq[pos]
         qualities[i] = ord(qual[pos]) -33
     posteriors = [calculatePosterior(guessBase, columnBases, qualities) for guessBase in acceptable_bases]
-    posteriors = np.true_divide(posteriors, np.sum(posteriors))
-    maxLikHood = np.argmax(posteriors)
+    likelihood = np.true_divide(posteriors, np.sum(posteriors))
+    maxLikHood = np.argmax(likelihood)
     concensusBase = acceptable_bases[maxLikHood]
     posterior = posteriors[maxLikHood]
 #    quality = -10 * np.log10(1 - posterior) if posterior < 1 else maxQ
@@ -80,7 +80,7 @@ def qual_string(posteriors):
     posteriors = np.array(posteriors, dtype=np.float64)
     posteriors[posteriors == 1] = 0.999999
     quality =  -10 * np.log10(1 - posteriors)
-    quality = np.array(quality,dtype=np.int64)  + 33
+    quality = np.array(quality,dtype=np.int64) + 33
     quality[quality<minQ] = minQ
     quality[quality > maxQ] = maxQ
     quality = ''.join(map(chr,quality))
