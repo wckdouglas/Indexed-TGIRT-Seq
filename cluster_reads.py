@@ -35,7 +35,6 @@ class seqRecord:
 
 #======================  starting concensus functions =============================
 
-
 def qual2Prob(q):
     '''
     Given a q list,
@@ -74,8 +73,18 @@ def calculateConcensusBase(arg):
     maxLikHood = np.argmax(posteriors)
     concensusBase = acceptable_bases[maxLikHood]
     posterior = posteriors[maxLikHood]
-    quality = -10 * np.log10(1 - posterior) if posterior < 1 else maxQ
-    return concensusBase, quality
+#    quality = -10 * np.log10(1 - posterior) if posterior < 1 else maxQ
+    return concensusBase, posterior #, quality
+
+def qual_string(posteriors):
+    posteriors = np.array(posteriors, dtype=np.float64)
+    posteriors[posteriors == 1] = 0.999999
+    quality =  -10 * np.log10(1 - posteriors)
+    quality = np.array(quality,dtype=np.int64)  + 33
+    quality[quality<minQ] = minQ
+    quality[quality > maxQ] = maxQ
+    quality = ''.join(map(chr,quality))
+    return quality
 
 def concensusSeq(seqList, qualList, positions):
     """given a list of sequences, a list of quality and sequence length.
@@ -84,12 +93,9 @@ def concensusSeq(seqList, qualList, positions):
     """
     if len(seqList) > 1:
         concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos) for pos in positions])
-	bases, quals = zip(*concensusPosition)
-	quality = np.array(quals,dtype=np.int64)
-	quality[quality<minQ] = minQ
-	quality[quality > maxQ] = maxQ
+	bases, posteriors = zip(*concensusPosition)
 	sequence = ''.join(list(bases))
-	quality = ''.join(map(chr,quality))
+	quality = qual_string(posteriors)
     else:
 	sequence = seqList[0]
 	quality = qualList[0]
@@ -105,7 +111,7 @@ def plotBCdistribution(barcodeCount, outputprefix):
     hist, bins = np.histogram(barcodeCount[barcodeCount<50],bins=50)
     centers = (bins[:-1] + bins[1:]) / 2
     width = 0.7 * (bins[1] - bins[0])
-    figurename = '%s.png' %(outputprefix)
+    figurename = '%s.pdf' %(outputprefix)
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax.bar(centers,hist,align='center',width=width)

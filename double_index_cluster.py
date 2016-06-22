@@ -75,9 +75,9 @@ def errorFreeReads(readCluster, index, counter, minReadCount, read1, read2):
     if readCluster is not None and readCluster.member_count > minReadCount:
         sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(readCluster)
         counter += 1
-        leftRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
+        leftRecord = '@cluster_%i_%s %i readCluster\n%s\n+\n%s\n' \
             %(counter, index, readCluster.member_count, sequenceLeft, qualityLeft)
-        rightRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
+        rightRecord = '@cluster_%i_%s %i readCluster\n%s\n+\n%s\n' \
             %(counter, index, readCluster.member_count, sequenceRight, qualityRight)
         read1.write(leftRecord)
         read2.write(rightRecord)
@@ -104,7 +104,7 @@ def readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
     index = barcode_left + '/' + barcode_right
     if ('N' not in index \
             and np.min([barcode_qual_mean_right, barcode_qual_mean_left]) > barcodeCutOff \
-            and not any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']) \
+            and not any(pattern in index for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']) \
             and hammingDistance(constant_right_region, constant_right) <= hamming_right_threshold \
             and hammingDistance(constant_left_region, constant_left) <= hamming_left_threshold):
         seqLeft = seqLeft[usable_left_seq:]

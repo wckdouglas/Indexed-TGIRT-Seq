@@ -71,9 +71,9 @@ def errorFreeReads(readCluster, index, counter, minReadCount, read1, read2):
     if readCluster is not None and readCluster.member_count > minReadCount:
         sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(readCluster)
         counter += 1
-        leftRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
+        leftRecord = '@cluster_%i_%s %i readCluster\n%s\n+\n%s\n' \
             %(counter, index, readCluster.member_count, sequenceLeft, qualityLeft)
-        rightRecord = '@cluster_%i %s %i readCluster\n%s\n+\n%s\n' \
+        rightRecord = '@cluster_%i_%s %i readCluster\n%s\n+\n%s\n' \
             %(counter, index, readCluster.member_count, sequenceRight, qualityRight)
         read1.write(leftRecord)
         read2.write(rightRecord)
