@@ -161,7 +161,7 @@ def selectSeqLength(readLengthArray):
     seqlength, count = np.unique(readLengthArray, return_counts=True)
     return seqlength[count==max(count)][0]
 
-def errorFreeReads(args):
+def errorFreeReads(readCluster, index, counter, minReadCount, read1, read2):
     """
     main function for getting concensus sequences from read clusters.
     return  a pair of concensus reads with a 4-line fastq format
@@ -169,10 +169,7 @@ def errorFreeReads(args):
                   2. concensusPairs,
                   3. calculateConcensusBase
     """
-    #if readCluster.readCounts() > minReadCount:
-    #    reads = filterRead(readCluster)
     # skip if not enough sequences to perform voting
-    readCluster, index, counter, minReadCount, read1, read2 = args
     if readCluster is not None and readCluster.readCounts() > minReadCount:
         sequenceLeft, qualityLeft, supportedLeftReads, sequenceRight, qualityRight, supportedRightReads = concensusPairs(readCluster)
         counter += 1
@@ -184,7 +181,7 @@ def errorFreeReads(args):
         read2.write(rightRecord)
         if counter % 100000 == 0:
             stderr.write('[%s] Processed %i read clusters.\n' %(programname, count))
-    return 0
+    return counter
 
 def hammingDistance(expected_constant, constant_region):
     dist = hamming(list(expected_constant),list(constant_region))
@@ -270,8 +267,8 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     read2File = outputprefix + '_R2_001.fastq.gz'
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         dict_iter = barcodeDict.iteritems()
-        iterator = iter([(seq_record, index, counter, minReadCount, read1, read2) for index, seq_record in dict_iter])
-        imap(errorFreeReads,iterator)
+        for index, seq_record in dict_iter:
+            counter = errorFreeReads(seq_record, index, counter, minReadCount, read1, read2) 
 #    # since some cluster that do not have sufficient reads
 #    # will return None, results need to be filtered
     stderr.write('[%s] Extracted error free reads\n' %(programname))
