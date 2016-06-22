@@ -104,7 +104,7 @@ def readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
     if ('N' not in barcode \
             and np.min([barcode_qual_mean_right, barcode_qual_mean_left]) > barcodeCutOff \
             and not any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']) \
-            and hammingDistance(constant_right_region, constant_right) <= hamming_right_threshold)\
+            and hammingDistance(constant_right_region, constant_right) <= hamming_right_threshold \
             and hammingDistance(constant_left_region, constant_left) <= hamming_left_threshold):
         seqLeft = seqLeft[usable_left_seq:]
         qualLeft = qualLeft[usable_left_seq:]
