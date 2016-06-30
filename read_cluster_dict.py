@@ -152,6 +152,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     stderr.write('[%s]     read1:            %s\n' %(programname, read1File))
     stderr.write('[%s]     read2:            %s\n' %(programname, read2File))
     stderr.write('[%s]     output clusters:  %i\n' %(programname, counter))
+    stderr.write('[%s]     % retained:       %.3f\n' %(programname, read_num / float(counter) * 100))
     return 0
 
 def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
