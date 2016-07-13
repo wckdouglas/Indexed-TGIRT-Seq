@@ -10,6 +10,7 @@ from sys import stderr
 sns.set_style('white')
 minQ = 33
 maxQ = 73
+maxProb = 0.999999
 
 #    ==================      Sequence class sotring left right record =============
 class seqRecord:
@@ -64,23 +65,22 @@ def calculateConcensusBase(arg):
     no_of_reads = len(seqList)
     acceptable_bases = np.array(['A','C','T','G'], dtype='string')
     columnBases = np.empty(no_of_reads,dtype='string')
-    qualities = np.empty(no_of_reads,dtype=np.int64)
+    qualities = np.empty(no_of_reads,dtype=np.int8)
     for seq, qual, i  in zip(seqList, qualList, range(no_of_reads)):
         columnBases[i] = seq[pos]
         qualities[i] = ord(qual[pos]) -33
     posteriors = [calculatePosterior(guessBase, columnBases, qualities) for guessBase in acceptable_bases]
-    likelihood = np.true_divide(posteriors, np.sum(posteriors))
-    maxLikHood = np.argmax(likelihood)
-    concensusBase = acceptable_bases[maxLikHood]
-    posterior = posteriors[maxLikHood]
-#    quality = -10 * np.log10(1 - posterior) if posterior < 1 else maxQ
-    return concensusBase, posterior #, quality
+    likelihoods = np.true_divide(posteriors, np.sum(posteriors))
+    argMaxLikHood = np.argmax(likelihoods)
+    concensusBase = acceptable_bases[argMaxLikHood]
+    posterior = posteriors[argMaxLikHood]
+    return concensusBase, posterior
 
-def qual_string(posteriors):
-    posteriors = np.array(posteriors, dtype=np.float64)
-    posteriors[posteriors == 1] = 0.999999
+def qualString(posteriors):
+    posteriors = np.array(posteriors, dtype=np.float16)
+    posteriors[posteriors > maxProb] = maxProb
     quality =  -10 * np.log10(1 - posteriors)
-    quality = np.array(quality,dtype=np.int64) + 33
+    quality = np.array(quality,dtype=np.int8) + 33
     quality[quality<minQ] = minQ
     quality[quality > maxQ] = maxQ
     quality = ''.join(map(chr,quality))
@@ -93,12 +93,12 @@ def concensusSeq(seqList, qualList, positions):
     """
     if len(seqList) > 1:
         concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos) for pos in positions])
-	bases, posteriors = zip(*concensusPosition)
-	sequence = ''.join(list(bases))
-	quality = qual_string(posteriors)
+        bases, posteriors = zip(*concensusPosition)
+        sequence = ''.join(list(bases))
+        quality = qualString(posteriors)
     else:
-	sequence = seqList[0]
-	quality = qualList[0]
+        sequence = seqList[0]
+        quality = qualList[0]
     return sequence, quality
 
 def hammingDistance(expected_constant, constant_region):

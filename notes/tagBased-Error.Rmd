@@ -48,8 +48,8 @@ For the following example illutrated with **R**, if a position in a read cluster
 ```{r warning = F, message = F }
 library(cowplot)
 
-q <- c(74, 74, 80, 80, 80, 80, 70, 72) - 33
-b <- c('C', 'C', 'C', 'A', 'A', 'A', 'A', 'C')
+q <- c(74,70,74) - 33
+b <- c('G','G','A')
 
 phred2prob <- function(q){
   return (10 ^ (-q / 10))
@@ -79,7 +79,7 @@ Q = -10log_{10} (1 - P(I=C | r_{j},Q_{j}))
 \]
 
 ```{r, echo =F }
-Quality = - 10 * log10(1 - posteriorsDist[bases=='A']) 
+Quality = - 10 * log10(1 - posteriors[bases=='A']) 
 ```
 
 In the above example, uncorrected quality score would be `r Quality`.
@@ -98,7 +98,7 @@ quality[quality<minQ] = minQ
 quality[quality<maxQ] = maxQ
 ```
 
-The corrected score for the above sample of a read base *C* would be `r intToUtf8(as.integer(Quality)+33)` 
+The corrected score for the above sample of a read base *C* would be: **`r intToUtf8(as.integer(Quality)+33)` **
 
 ![](http://www.omixon.com/wp-content/uploads/2013/06/illumina_fastq_coding.png)
 
