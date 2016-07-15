@@ -77,7 +77,7 @@ def calculateConcensusBase(arg):
     return concensusBase, posterior
 
 def qualString(posteriors):
-    posteriors = np.array(posteriors, dtype=np.float16)
+    posteriors = np.array(posteriors, dtype=np.float32)
     posteriors[posteriors > maxProb] = maxProb
     quality =  -10 * np.log10(1 - posteriors)
     quality = np.array(quality,dtype=np.int8) + 33
