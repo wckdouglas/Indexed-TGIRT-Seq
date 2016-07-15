@@ -13,6 +13,7 @@ from itertools import izip, imap
 from multiprocessing import Pool
 from cluster_reads import *
 from collections import defaultdict
+import h5py
 programname = os.path.basename(sys.argv[0]).split('.')[0]
 
 def getOptions():
@@ -119,9 +120,9 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     output_cluster_count = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
-    pool = Pool(threads)
     dict_iter = barcodeDict.iteritems()
     args = ((seq_record, index, minReadCount) for index, seq_record in dict_iter)
+    pool = Pool(threads)
     processes = pool.imap_unordered(errorFreeReads, args)
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         for p in processes:
