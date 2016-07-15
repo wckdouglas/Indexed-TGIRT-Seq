@@ -10,6 +10,7 @@ import gzip
 import time
 import os
 from itertools import izip, imap
+from multiprocessing import Pool
 from cluster_reads import *
 from collections import defaultdict
 programname = os.path.basename(sys.argv[0]).split('.')[0]
