@@ -159,11 +159,11 @@ def writingAndClusteringReads(outputprefix, minReadCount, h5_file, threads, barc
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant, threads):
     h5_file = outputprefix + '.h5'
     barcode_file = outputprefix + '.txt'
-    #barcodeDict, read_num = recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant)
-    #barcodeCount = map(lambda x: barcodeDict[x].member_count, barcodeDict.keys())
-    #p = plotBCdistribution(barcodeCount, outputprefix)
-    #dictToh5File(barcodeDict, h5_file, barcode_file)
-    #barcodeDict.clear()
+    barcodeDict, read_num = recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant)
+    barcodeCount = map(lambda x: barcodeDict[x].member_count, barcodeDict.keys())
+    p = plotBCdistribution(barcodeCount, outputprefix)
+    dictToh5File(barcodeDict, h5_file, barcode_file)
+    barcodeDict.clear()
     output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, minReadCount, h5_file, threads, barcode_file)
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)
