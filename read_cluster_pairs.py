@@ -17,7 +17,8 @@ import h5py
 programname = os.path.basename(sys.argv[0]).split('.')[0]
 
 def getOptions():
-    '''reading input
+    '''
+    reading input
     '''
     descriptions = 'Clustering fastq reads to fasta reads with the first $IDXBASE bases as cDNA-synthesis barcode. ' +\
                 'Concensus bases are called only when the fraction of reads that contain the concensus base exceed some threshold. '+ \
