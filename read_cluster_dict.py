@@ -34,8 +34,10 @@ def getOptions():
         help="how many base in 5' end as index? (default: 13)")
     parser.add_argument('-q', '--barcodeCutOff', type=int, default=30,
         help="Average base calling quality for barcode sequence (default=30)")
-    parser.add_argument("-c", "--constant_region", default='',
-            help="Constant sequence after tags (default: '')")
+    parser.add_argument("-c", "--constant_region", default='CATCG',
+            help="Constant sequence after tags (default: CATCG ,e.g. Douglas's index-R1R)")
+    parser.add_argument("-t", "--threadas", default=1, type=int,
+            help="Threads to use (default: 1)")
     args = parser.parse_args()
     return args
 
@@ -65,10 +67,10 @@ def errorFreeReads(args):
     readCluster, index, minReadCount = args
     if readCluster is not None and readCluster.member_count > minReadCount:
         sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(readCluster)
-        leftRecord = '@cluster_%i_%s %i readCluster\n%s\n+\n%s\n' \
-            %(counter, index, readCluster.member_count, sequenceLeft, qualityLeft)
-        rightRecord = '@cluster_%i_%s %i readCluster\n%s\n+\n%s\n' \
-            %(counter, index, readCluster.member_count, sequenceRight, qualityRight)
+        leftRecord = '%s_%i_readCluster\n%s\n+\n%s\n' \
+            %(index, readCluster.member_count, sequenceLeft, qualityLeft)
+        rightRecord = '%s_%i_readCluster\n%s\n+\n%s\n' \
+            %(index, readCluster.member_count, sequenceRight, qualityRight)
     return leftRecord, rightRecord
 
 def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, constant_length, hamming_threshold, usable_seq):
@@ -141,8 +143,8 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
                 stderr.write('[%s] Processed %i read clusters.\n' %(programname, counter))
             if p != None:
                 leftRecord, rightRecord = p
-                read1.write(leftRecord)
-                read2.write(rightRecord)
+                read1.write('@cluster%i_%s' %(counter, leftRecord))
+                read2.write('@cluster%i_%s' %(counter, rightRecord))
                 output_cluster_count += 1
     pool.close()
     pool.join()
@@ -171,11 +173,12 @@ def main(args):
     minReadCount = args.cutoff
     barcodeCutOff = args.barcodeCutOff
     constant = args.constant_region
-    threads = 12
+    threads = args.threads
 
     #print out parameters
     stderr.write('[%s] [Parameters] \n' %(programname))
     stderr.write('[%s] indexed bases:                     %i\n' %(programname,idxBase))
+    stderr.write('[%s] Threads:                           %i\n' %(programname,threads))
     stderr.write('[%s] minimum coverage:                  %i\n' %(programname,minReadCount))
     stderr.write('[%s] outputPrefix:                      %s\n' %(programname,outputprefix))
     stderr.write('[%s] using constant regions:   %s\n' %(programname,constant))
