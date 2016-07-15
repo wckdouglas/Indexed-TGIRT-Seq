@@ -106,7 +106,7 @@ def writeFile(outputprefix, leftReads, rightReads):
             read2.write(right)
     return read1File, read2File
 
-def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant):
+def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant, threads):
     barcodeDict = defaultdict(seqRecord)
     read_num = 0
     constant_length = len(constant)
@@ -171,6 +171,7 @@ def main(args):
     minReadCount = args.cutoff
     barcodeCutOff = args.barcodeCutOff
     constant = args.constant_region
+    threads = 12
 
     #print out parameters
     stderr.write('[%s] [Parameters] \n' %(programname))
@@ -180,7 +181,7 @@ def main(args):
     stderr.write('[%s] using constant regions:   %s\n' %(programname,constant))
 
     # divide reads into subclusters
-    clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant)
+    clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant, threads)
     stderr.write('[%s] time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
 
