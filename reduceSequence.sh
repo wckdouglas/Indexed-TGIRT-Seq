@@ -1,10 +1,10 @@
 #!/bin/bash
 
-PROJECT_PATH=/stor/work/Lambowitz/cdw2854/jurkatCells
-DATA_PATH=$PROJECT_PATH/rawData
+PROJECT_PATH=/corral-repl/utexas/2013lambowitz/Data/JA16381/combined
+DATA_PATH=$PROJECT_PATH
 RESULT_PATH=$DATA_PATH/splitted
 SUFFIX=_R1_001.fastq.gz
-PROGRAM=read_cluster_dict.py
+PROGRAM=read_cluster_pairs.py
 mkdir -p  $RESULT_PATH
 
 for FQ1 in `ls $DATA_PATH/*${SUFFIX}`

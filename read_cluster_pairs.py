@@ -36,7 +36,7 @@ def getOptions():
         help="Average base calling quality for barcode sequence (default=30)")
     parser.add_argument("-c", "--constant_region", default='CATCG',
             help="Constant sequence after tags (default: CATCG ,e.g. Douglas's index-R1R)")
-    parser.add_argument("-t", "--threadas", default=1, type=int,
+    parser.add_argument("-t", "--threads", default=1, type=int,
             help="Threads to use (default: 1)")
     args = parser.parse_args()
     return args

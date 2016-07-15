@@ -38,16 +38,10 @@ def getOptions():
             help="Constant sequence after tags (default: '')")
     parser.add_argument("-r", "--constant_right", default='',
             help="Constant sequence after tags (default: '')")
+    parser.add_argument("-t", "--threads", default=1, type=int,
+            help="Threads to use (default: 1)")
     args = parser.parse_args()
-    outputprefix = args.outputprefix
-    inFastq1 = args.fastq1
-    inFastq2 = args.fastq2
-    idxBase = args.idxBase
-    minReadCount = args.cutoff
-    barcodeCutOff = args.barcodeCutOff
-    constant_left = args.constant_left
-    constant_right = args.constant_right
-    return outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant_left, constant_right
+    return args
 
 def concensusPairs(reads):
     """ given a pair of reads as defined as the class: seqRecord
@@ -180,8 +174,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     stderr.write('[%s] Percentage retained:       %.3f\n' %(programname, float(counter)/read_num * 100))
     return 0
 
-def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
-        barcodeCutOff, constant_left, constant_right):
+def main(args):
     """
     main function:
         controlling work flow
@@ -190,6 +183,15 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
         3. writing concensus sequence to files
     """
     start = time.time()
+    outputprefix = args.outputprefix
+    inFastq1 = args.fastq1
+    inFastq2 = args.fastq2
+    idxBase = args.idxBase
+    minReadCount = args.cutoff
+    barcodeCutOff = args.barcodeCutOff
+    constant_left = args.constant_left
+    constant_right = args.constant_right
+    threads = args.threads
 
     #print out parameters
     stderr.write( '[%s] Using parameters: \n' %(programname))
@@ -205,5 +207,5 @@ def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     return 0
 
 if __name__ == '__main__':
-    outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant_left, constant_right = getOptions()
-    main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant_left, constant_right)
+    args = getOptions()
+    main(args)
