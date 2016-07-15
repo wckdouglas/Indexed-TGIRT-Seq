@@ -94,20 +94,6 @@ def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, 
         return 0
     return 1
 
-def writeFile(outputprefix, leftReads, rightReads):
-    """
-    write fastq lines to gzip files
-    """
-    # output file name
-    read1File = outputprefix + '_R1_001.fastq.gz'
-    read2File = outputprefix + '_R2_001.fastq.gz'
-    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
-        for left, right in zip(leftReads,rightReads):
-            assert left.split(' ')[0] == right.split(' ')[0], 'Wrong order pairs!!'
-            read1.write(left)
-            read2.write(right)
-    return read1File, read2File
-
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant, threads):
     barcodeDict = defaultdict(seqRecord)
     read_num = 0
@@ -143,8 +129,8 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
                 stderr.write('[%s] Processed %i read clusters.\n' %(programname, counter))
             if p != None:
                 leftRecord, rightRecord = p
-                read1.write('@cluster%i_%s' %(counter, leftRecord))
-                read2.write('@cluster%i_%s' %(counter, rightRecord))
+                read1.write('@cluster%i_%s' %(output_cluster_count, leftRecord))
+                read2.write('@cluster%i_%s' %(output_cluster_count, rightRecord))
                 output_cluster_count += 1
     pool.close()
     pool.join()
