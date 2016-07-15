@@ -63,7 +63,7 @@ def concensusPairs(reads):
     assert len(sequenceRight) == len(qualityRight), 'Wrong concensus sequence and quality!'
     return sequenceLeft, qualityLeft, sequenceRight, qualityRight
 
-def errorFreeReads(readCluster, index, counter, minReadCount, read1, read2):
+def errorFreeReads(args):
     """
     main function for getting concensus sequences from read clusters.
     return  a pair of concensus reads with a 4-line fastq format
@@ -72,18 +72,15 @@ def errorFreeReads(readCluster, index, counter, minReadCount, read1, read2):
                   3. calculateConcensusBase
     """
     # skip if not enough sequences to perform voting
+    readCluster, index, minReadCount = args
     if readCluster is not None and readCluster.member_count > minReadCount:
         sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(readCluster)
-        counter += 1
-        leftRecord = '@cluster_%i_%s %i readCluster\n%s\n+\n%s\n' \
-            %(counter, index, readCluster.member_count, sequenceLeft, qualityLeft)
-        rightRecord = '@cluster_%i_%s %i readCluster\n%s\n+\n%s\n' \
-            %(counter, index, readCluster.member_count, sequenceRight, qualityRight)
-        read1.write(leftRecord)
-        read2.write(rightRecord)
-        if counter % 100000 == 0:
-            stderr.write('[%s] Processed %i read clusters.\n' %(programname, counter))
-    return counter
+        leftRecord = '%s_%i_readCluster\n%s\n+\n%s\n' \
+            %(index, readCluster.member_count, sequenceLeft, qualityLeft)
+        rightRecord = '%s_%i_readCluster\n%s\n+\n%s\n' \
+            %(index, readCluster.member_count, sequenceRight, qualityRight)
+    return leftRecord, rightRecord
+
 
 def readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
                     constant_left, constant_right, constant_left_length, constant_right_length,
@@ -154,22 +151,33 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = 0
+    output_cluster_count = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
+    pool = Pool(threads)
+    dict_iter = barcodeDict.iteritems()
+    args = ((seq_record, index, minReadCount) for index, seq_record in dict_iter)
+    processes = pool.imap_unordered(errorFreeReads, args)
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
-        dict_iter = barcodeDict.iteritems()
-        for index, seq_record in dict_iter:
-            counter = errorFreeReads(seq_record, index, counter, minReadCount, read1, read2)
-#    # since some cluster that do not have sufficient reads
-#    # will return None, results need to be filtered
-    stderr.write('[%s] Extracted error free reads\n' %(programname))
-    # use two cores for parallel writing file
-
+        for p in processes:
+            counter += 1
+            if counter % 100000 == 0:
+                stderr.write('[%s] Processed %i read clusters.\n' %(programname, counter))
+            if p != None:
+                leftRecord, rightRecord = p
+                read1.write('@cluster%i_%s' %(output_cluster_count, leftRecord))
+                read2.write('@cluster%i_%s' %(output_cluster_count, rightRecord))
+                output_cluster_count += 1
+    pool.close()
+    pool.join()
     # all done!
+
     stderr.write('[%s] Finished writing error free reads\n' %programname)
-    stderr.write('[%s]     read1:            %s\n' %(programname, read1File))
-    stderr.write('[%s]     read2:            %s\n' %(programname, read2File))
-    stderr.write('[%s]     output clusters:  %i\n' %(programname, counter))
+    stderr.write('[%s] [Summary]                        \n' %programname)
+    stderr.write('[%s] read1:                     %s\n' %(programname, read1File))
+    stderr.write('[%s] read2:                     %s\n' %(programname, read2File))
+    stderr.write('[%s] output clusters:           %i\n' %(programname, output_cluster_count))
+    stderr.write('[%s] Percentage retained:       %.3f\n' %(programname, float(counter)/read_num * 100))
     return 0
 
 def main(outputprefix, inFastq1, inFastq2, idxBase, minReadCount,
