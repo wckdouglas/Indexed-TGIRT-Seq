@@ -43,39 +43,6 @@ def getOptions():
     args = parser.parse_args()
     return args
 
-def concensusPairs(table):
-    """ given a pair of reads as defined as the class: seqRecord
-    return concensus sequence and mean quality of the pairs,
-        as well as the number of reads that supports the concnesus pairs
-    see function: concensusSeq, calculateConcensusBase
-    """
-    # get concensus left reads first
-    sequenceLeft, qualityLeft = concensusSeq(table[0], table[2], range(len(table[0][0])))
-    assert len(sequenceLeft) == len(qualityLeft), 'Wrong concensus sequence and quality!'
-    # get concensus right reads first
-    sequenceRight, qualityRight = concensusSeq(table[1], table[3], range(len(table[1][0])))
-    assert len(sequenceRight) == len(qualityRight), 'Wrong concensus sequence and quality!'
-    return sequenceLeft, qualityLeft, sequenceRight, qualityRight
-
-def errorFreeReads(args):
-    """
-    main function for getting concensus sequences from read clusters.
-    return  a pair of concensus reads with a 4-line fastq format
-    see functions: 1. filterRead,
-                  2. concensusPairs,
-                  3. calculateConcensusBase
-    """
-    # skip if not enough sequences to perform voting
-    index, h5_file, minReadCount = args
-    with h5py.File(h5_file,'r') as h5:
-        table = h5['barcodes'][index.upper()]
-        member_count = table.shape[1]
-        if member_count >= minReadCount:
-            sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(table)
-            leftRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceLeft, qualityLeft)
-            rightRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceRight, qualityRight)
-            return leftRecord, rightRecord
-
 def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, constant_length, hamming_threshold, usable_seq):
     """
     generate read cluster with a dictionary object and seqRecord class.
@@ -101,22 +68,6 @@ def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, 
         return 0
     return 1
 
-def dictToh5File(barcodeDict, h5_file, barcode_file):
-    """
-    converting sequence dict to a h5 file for minimizing memory use
-    """
-    with h5py.File(h5_file,'w') as h5, open(barcode_file,'w') as bar_file:
-        group = h5.create_group('barcodes')
-        for index, index_family in barcodeDict.iteritems():
-            df = np.array([index_family['seq_left'],
-                           index_family['seq_right'],
-                           index_family['qual_left'],
-                           index_family['qual_right']])
-            table = group.create_dataset(index, data = df)
-            bar_file.write(index + '\n')
-    print 'Finished writting %s'  %h5_file
-    return 0
-
 def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant):
     barcodeDict = defaultdict(lambda: defaultdict(list))
     read_num = 0
@@ -133,31 +84,6 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, cons
                 stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
     stderr.write('[%s] Extracted: %i barcode sequences, discarded %i sequences\n' %(programname,len(barcodeDict.keys()), discarded_sequence_count))
     return barcodeDict, read_num
-
-def writingAndClusteringReads(outputprefix, minReadCount, h5_file, threads, barcode_file):
-    # From index library, generate error free reads
-    # using multicore to process read clusters
-    counter = 0
-    output_cluster_count = 0
-    read1File = outputprefix + '_R1_001.fastq.gz'
-    read2File = outputprefix + '_R2_001.fastq.gz'
-    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2, open(barcode_file,'r') as bar_file:
-        args = ((str(index).strip(), h5_file, minReadCount) for index in bar_file)
-        pool = Pool(threads)
-        processes = pool.imap_unordered(errorFreeReads, args)
-        #processes = imap(errorFreeReads, args)
-        for p in processes:
-            counter += 1
-            if counter % 100000 == 0:
-                stderr.write('[%s] Processed %i read clusters.\n' %(programname, counter))
-            if p != None:
-                leftRecord, rightRecord = p
-                read1.write('@cluster%i_%s' %(output_cluster_count, leftRecord))
-                read2.write('@cluster%i_%s' %(output_cluster_count, rightRecord))
-                output_cluster_count += 1
-    pool.close()
-    pool.join()
-    return output_cluster_count, read1File, read2File
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant, threads):
     h5_file = outputprefix + '.h5'
