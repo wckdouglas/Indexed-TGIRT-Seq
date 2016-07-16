@@ -15,30 +15,6 @@ minQ = 33
 maxQ = 73
 maxProb = 0.999999
 
-#    ==================      Sequence class sotring left right record =============
-class seqRecord:
-    def __init__(self):
-        self.seqListRight = []
-        self.qualListRight = []
-        self.seqListLeft = []
-        self.qualListLeft = []
-        self.member_count = 0
-
-    def addRecord(self, seqRight, qualRight, seqLeft, qualLeft):
-        self.seqListRight.append(seqRight)
-        self.qualListRight.append(qualRight)
-        self.seqListLeft.append(seqLeft)
-        self.qualListLeft.append(qualLeft)
-        self.member_count += 1
-
-    def readLengthRight(self):
-        return np.array([len(seq) for seq in self.seqListRight],dtype=np.int64)
-
-    def readLengthLeft(self):
-        return np.array([len(seq) for seq in self.seqListLeft],dtype=np.int64)
-
-#======================  starting concensus functions =============================
-
 def qual2Prob(q):
     '''
     Given a q list,
@@ -191,8 +167,8 @@ def writingAndClusteringReads(outputprefix, minReadCount, h5_file, threads, barc
         #processes = imap(errorFreeReads, args)
         for p in processes:
             counter += 1
-            if counter % 100000 == 0:
-                stderr.write('[%s] Processed %i read clusters.\n' %(programname, counter))
+            if counter % 1000000 == 0:
+                stderr.write('Processed %i read clusters.\n' %(counter))
             if p != None:
                 leftRecord, rightRecord = p
                 read1.write('@cluster%i_%s' %(output_cluster_count, leftRecord))
