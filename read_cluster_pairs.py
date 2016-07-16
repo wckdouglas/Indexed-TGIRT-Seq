@@ -93,7 +93,11 @@ def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, 
             and hammingDistance(constant, constant_region) <= hamming_threshold):
         seqLeft = seqLeft[usable_seq:]
         qualLeft = qualLeft[usable_seq:]
-        barcodeDict[barcode].addRecord(seqRight, qualRight, seqLeft, qualLeft)
+        index_family = barcodeDict[barcode]
+        index_family['seq_left'].append(seqLeft)
+        index_family['seq_right'].append(seqRight)
+        index_family['qual_left'].append(qualLeft)
+        index_family['qual_right'].append(qualRight)
         return 0
     return 1
 
@@ -103,19 +107,18 @@ def dictToh5File(barcodeDict, h5_file, barcode_file):
     """
     with h5py.File(h5_file,'w') as h5, open(barcode_file,'w') as bar_file:
         group = h5.create_group('barcodes')
-        for index, seq_record in barcodeDict.iteritems():
-            df = np.array([seq_record.seqListLeft,
-                           seq_record.seqListRight,
-                           seq_record.qualListLeft,
-                           seq_record.qualListRight],
-                           dtype='S256')
+        for index, index_family in barcodeDict.iteritems():
+            df = np.array([index_family['seq_left'],
+                           index_family['seq_right'],
+                           index_family['qual_left'],
+                           index_family['qual_right']])
             table = group.create_dataset(index, data = df)
             bar_file.write(index + '\n')
     print 'Finished writting %s'  %h5_file
     return 0
 
 def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant):
-    barcodeDict = defaultdict(seqRecord)
+    barcodeDict = defaultdict(lambda: defaultdict(list))
     read_num = 0
     constant_length = len(constant)
     hamming_threshold = float(1)/constant_length
@@ -160,7 +163,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     h5_file = outputprefix + '.h5'
     barcode_file = outputprefix + '.txt'
     barcodeDict, read_num = recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant)
-    barcodeCount = map(lambda x: barcodeDict[x].member_count, barcodeDict.keys())
+    barcodeCount = map(lambda x: len(barcodeDict[x]['seq_left']), barcodeDict.keys())
     p = plotBCdistribution(barcodeCount, outputprefix)
     dictToh5File(barcodeDict, h5_file, barcode_file)
     barcodeDict.clear()
