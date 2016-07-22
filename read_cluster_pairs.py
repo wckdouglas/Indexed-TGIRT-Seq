@@ -61,15 +61,12 @@ def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, 
         seqLeft = seqLeft[usable_seq:]
         qualLeft = qualLeft[usable_seq:]
         index_family = barcodeDict[barcode]
-        index_family['seq_left'].append(seqLeft)
-        index_family['seq_right'].append(seqRight)
-        index_family['qual_left'].append(qualLeft)
-        index_family['qual_right'].append(qualRight)
+        index_family.append([seqLeft,seqRight,qualLeft, qualRight])
         return 0
     return 1
 
 def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant):
-    barcodeDict = defaultdict(lambda: defaultdict(list))
+    barcodeDict = defaultdict(list)
     read_num = 0
     constant_length = len(constant)
     hamming_threshold = float(1)/constant_length
@@ -89,7 +86,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     h5_file = outputprefix + '.h5'
     barcode_file = outputprefix + '.txt'
     barcodeDict, read_num = recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant)
-    barcodeCount = map(lambda x: len(barcodeDict[x]['seq_left']), barcodeDict.keys())
+    barcodeCount = map(lambda x: len(barcodeDict[x]), barcodeDict.keys())
     p = plotBCdistribution(barcodeCount, outputprefix)
     dictToh5File(barcodeDict, h5_file, barcode_file)
     barcodeDict.clear()

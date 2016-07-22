@@ -10,6 +10,7 @@ from sys import stderr
 import h5py
 import gzip
 from multiprocessing import Pool
+from itertools import imap
 sns.set_style('white')
 minQ = 33
 maxQ = 73
@@ -104,19 +105,18 @@ def plotBCdistribution(barcodeCount, outputprefix):
     stderr.write('Plotted %s.\n' %figurename)
     return 0
 
+def writeToFile(h5_group, index, index_family, bar_file):
+    h5_group.create_dataset(index, data = index_family)
+    bar_file.write(index + '\n')
+    return 0
+
 def dictToh5File(barcodeDict, h5_file, barcode_file):
     """
     converting sequence dict to a h5 file for minimizing memory use
     """
     with h5py.File(h5_file,'w') as h5, open(barcode_file,'w') as bar_file:
         group = h5.create_group('barcodes')
-        for index, index_family in barcodeDict.iteritems():
-            df = np.array([index_family['seq_left'],
-                           index_family['seq_right'],
-                           index_family['qual_left'],
-                           index_family['qual_right']])
-            table = group.create_dataset(index, data = df)
-            bar_file.write(index + '\n')
+        [writeToFile(group, index, index_family, bar_file) for index, index_family in barcodeDict.iteritems()]
     print 'Finished writting %s'  %h5_file
     return 0
 
@@ -127,10 +127,10 @@ def concensusPairs(table):
     see function: concensusSeq, calculateConcensusBase
     """
     # get concensus left reads first
-    sequenceLeft, qualityLeft = concensusSeq(table[0], table[2], range(len(table[0][0])))
+    sequenceLeft, qualityLeft = concensusSeq(table[:,0], table[:,2], range(len(table[:,0][0])))
     assert len(sequenceLeft) == len(qualityLeft), 'Wrong concensus sequence and quality!'
     # get concensus right reads first
-    sequenceRight, qualityRight = concensusSeq(table[1], table[3], range(len(table[1][0])))
+    sequenceRight, qualityRight = concensusSeq(table[:,1], table[:,3], range(len(table[:,1][0])))
     assert len(sequenceRight) == len(qualityRight), 'Wrong concensus sequence and quality!'
     return sequenceLeft, qualityLeft, sequenceRight, qualityRight
 
