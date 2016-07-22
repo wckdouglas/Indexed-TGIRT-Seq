@@ -106,22 +106,13 @@ def plotBCdistribution(barcodeCount, outputprefix):
     stderr.write('Plotted %s.\n' %figurename)
     return 0
 
-def dictToShelve(shelf_file, barcodeDict, barcode_file):
-    with open(barcode_file,'w') as bar_file:
-        [bar_file.write(key+'\n') for key in barcodeDict.iterkeys()]
-    d = shelve.open(shelf_file,'c')
-    d['barcodes'] = barcodeDict
-    d.close()
-    print 'Finished writting %s'  %shelf_file
-    return 0
-
-def dictToh5File(barcodeDict, h5_file, barcode_file):
+def dictToh5File(barcodeDict, h5_file):
     """
     converting sequence dict to a h5 file for minimizing memory use
     """
-    with h5py.File(h5_file,'w') as h5, open(barcode_file,'w') as bar_file:
+    with h5py.File(h5_file,'w') as h5:
         group = h5.create_group('barcodes')
-        [h5_group.create_dataset(index, data = index_family) for index, index_family in barcodeDict.iteritems()]
+        [group.create_dataset(index, data = index_family) for index, index_family in barcodeDict.iteritems()]
     print 'Finished writting %s'  %h5_file
     return 0
 
