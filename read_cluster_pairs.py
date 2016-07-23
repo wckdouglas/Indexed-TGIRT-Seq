@@ -88,9 +88,9 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeC
     barcodeCount = map(lambda x: len(barcodeDict[x]), barcodeDict.keys())
     p = plotBCdistribution(barcodeCount, outputprefix)
     #dictToh5File(barcodeDict, h5_file)
-    barcodeDict.clear()
+    #barcodeDict.clear()
     #output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, minReadCount, h5_file, threads)
-    output_cluster_count, read1File, read2File = writingAndClusteringReadsDict(outputprefix, minReadCount, barcodeDict, threads)
+    output_cluster_count, read1File, read2File = writingAndClusteringReadsDict(outputprefix, minReadCount, barcodeDict)
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)
     stderr.write('[%s] [Summary]                        \n' %programname)
