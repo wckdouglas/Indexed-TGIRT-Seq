@@ -163,7 +163,7 @@ def writingAndClusteringReads(outputprefix, minReadCount, h5_file, threads):
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         args = ((str(index).strip(), h5_file, minReadCount) for index in indexes)
         pool = Pool(threads)
-        processes = pool.imap_unordered(errorFreeReads, args)
+        processes = pool.imap_unordered(errorFreeReads, args, chunksize = 10000)
         #processes = imap(errorFreeReads, args)
         for p in processes:
             counter += 1
