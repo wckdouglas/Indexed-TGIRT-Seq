@@ -144,7 +144,7 @@ def errorFreeReads(args):
     leftRecord, rightRecord = 0, 0
     with h5py.File(h5_file,'r') as h5:
         table = h5['barcodes'][index]
-        member_count = table.shape[1]
+        member_count = table.shape[0]
         if member_count >= minReadCount:
             sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(table)
             leftRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceLeft, qualityLeft)
