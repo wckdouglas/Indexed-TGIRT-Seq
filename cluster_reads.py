@@ -194,17 +194,20 @@ def errorFreeReadsDict(args):
         rightRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceRight, qualityRight)
     return leftRecord, rightRecord
 
+<<<<<<< HEAD
 def writingAndClusteringReadsDict(outputprefix, minReadCount, barcode_dict, threads):
+=======
+def writingAndClusteringReadsDict(outputprefix, minReadCount, barcode_dict):
+>>>>>>> 30cdc4839fa2b94ba00343686ef7a730f251cead
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = 0
     output_cluster_count = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
-    args =((np.array(table), index, minReadCount) for index, table in barcode_dict.iteritems())
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
-        processes = imap(errorFreeReads, args)
-        for p in processes:
+        args =((np.array(table), index, minReadCount) for index, table in barcode_dict.iteritems())
+        for p in imap(errorFreeReadsDict, args):
             counter += 1
             if counter % 1000000 == 0:
                 stderr.write('Processed %i read clusters.\n' %(counter))
