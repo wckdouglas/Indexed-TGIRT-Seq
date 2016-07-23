@@ -194,11 +194,7 @@ def errorFreeReadsDict(args):
         rightRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceRight, qualityRight)
     return leftRecord, rightRecord
 
-<<<<<<< HEAD
-def writingAndClusteringReadsDict(outputprefix, minReadCount, barcode_dict, threads):
-=======
 def writingAndClusteringReadsDict(outputprefix, minReadCount, barcode_dict):
->>>>>>> 30cdc4839fa2b94ba00343686ef7a730f251cead
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = 0
