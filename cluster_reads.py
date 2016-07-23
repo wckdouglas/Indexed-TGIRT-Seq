@@ -158,10 +158,8 @@ def writingAndClusteringReads(outputprefix, minReadCount, h5_file, threads):
     output_cluster_count = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
-    with h5py.File(h5_file) as h5:
-        indexes = h5['barcodes'].keys()
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
-        args = ((str(index).strip(), h5_file, minReadCount) for index in indexes)
+        args = ((str(index).strip(), h5_file, minReadCount) for index in h5py.File(h5_file)['barcodes'].keys())
         pool = Pool(threads)
         processes = pool.imap_unordered(errorFreeReads, args, chunksize = 10000)
         #processes = imap(errorFreeReads, args)
@@ -204,11 +202,9 @@ def writingAndClusteringReadsDict(outputprefix, minReadCount, barcode_dict, thre
     output_cluster_count = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
-    args =((np.array(table), index, minReadCount) for index,table in barcode_dict.iteritems())
+    args =((np.array(table), index, minReadCount) for index, table in barcode_dict.iteritems())
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
-        pool = Pool(threads)
-        processes = pool.imap_unordered(errorFreeReadsDict, args)
-        #processes = imap(errorFreeReads, args)
+        processes = imap(errorFreeReads, args)
         for p in processes:
             counter += 1
             if counter % 1000000 == 0:
@@ -218,5 +214,4 @@ def writingAndClusteringReadsDict(outputprefix, minReadCount, barcode_dict, thre
                 read1.write('@cluster%i_%s' %(output_cluster_count, leftRecord))
                 read2.write('@cluster%i_%s' %(output_cluster_count, rightRecord))
                 output_cluster_count += 1
-    pool.close()
     return output_cluster_count, read1File, read2File
