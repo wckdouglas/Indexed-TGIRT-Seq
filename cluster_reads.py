@@ -187,7 +187,7 @@ def errorFreeReadsDict(args):
     # skip if not enough sequences to perform voting
     table, index, minReadCount = args
     leftRecord, rightRecord = 0, 0
-    member_count = table.shape[1]
+    member_count = table.shape[0]
     if member_count >= minReadCount:
         sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(table)
         leftRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceLeft, qualityLeft)
