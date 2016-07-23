@@ -123,12 +123,15 @@ def concensusPairs(table):
         as well as the number of reads that supports the concnesus pairs
     see function: concensusSeq, calculateConcensusBase
     """
+    #extract table
+    seq_left_list, qual_left_list = table[:,0], table[:,2]
+    seq_right_list, qual_right_list = table[:,1], table[:,3]
+    seq_left_length, seq_right_length = range(len(table[:,0][0])), range(len(table[:,1][0]))
+
     # get concensus left reads first
-    sequenceLeft, qualityLeft = concensusSeq(table[:,0], table[:,2], range(len(table[:,0][0])))
-    assert len(sequenceLeft) == len(qualityLeft), 'Wrong concensus sequence and quality!'
-    # get concensus right reads first
-    sequenceRight, qualityRight = concensusSeq(table[:,1], table[:,3], range(len(table[:,1][0])))
-    assert len(sequenceRight) == len(qualityRight), 'Wrong concensus sequence and quality!'
+    sequenceLeft, qualityLeft = concensusSeq(seq_left_list, qual_left_list, seq_left_length)
+    # get concensus right reads
+    sequenceRight, qualityRight = concensusSeq(seq_right_list, qual_right_list, seq_right_length)
     return sequenceLeft, qualityLeft, sequenceRight, qualityRight
 
 def errorFreeReads(args):
