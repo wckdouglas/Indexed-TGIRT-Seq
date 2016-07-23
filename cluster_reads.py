@@ -176,3 +176,46 @@ def writingAndClusteringReads(outputprefix, minReadCount, h5_file, threads):
     pool.close()
     pool.join()
     return output_cluster_count, read1File, read2File
+
+def errorFreeReadsDict(args):
+    """
+    main function for getting concensus sequences from read clusters.
+    return  a pair of concensus reads with a 4-line fastq format
+    see functions: 1. filterRead,
+                  2. concensusPairs,
+                  3. calculateConcensusBase
+    """
+    # skip if not enough sequences to perform voting
+    table, index, minReadCount = args
+    leftRecord, rightRecord = 0, 0
+    member_count = table.shape[1]
+    if member_count >= minReadCount:
+        sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(table)
+        leftRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceLeft, qualityLeft)
+        rightRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceRight, qualityRight)
+    return leftRecord, rightRecord
+
+def writingAndClusteringReadsDict(outputprefix, minReadCount, barcode_dict, threads):
+    # From index library, generate error free reads
+    # using multicore to process read clusters
+    counter = 0
+    output_cluster_count = 0
+    read1File = outputprefix + '_R1_001.fastq.gz'
+    read2File = outputprefix + '_R2_001.fastq.gz'
+    indexes = barcode_dict.iterkeys()
+    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
+        args =((np.array(barcode_dict[index]), index, minReadCount) for index in indexes)
+        pool = Pool(threads)
+        processes = pool.imap_unordered(errorFreeReadsDict, args)
+        #processes = imap(errorFreeReads, args)
+        for p in processes:
+            counter += 1
+            if counter % 1000000 == 0:
+                stderr.write('Processed %i read clusters.\n' %(counter))
+            if p != (0,0):
+                leftRecord, rightRecord = p
+                read1.write('@cluster%i_%s' %(output_cluster_count, leftRecord))
+                read2.write('@cluster%i_%s' %(output_cluster_count, rightRecord))
+                output_cluster_count += 1
+    pool.close()
+    return output_cluster_count, read1File, read2File
