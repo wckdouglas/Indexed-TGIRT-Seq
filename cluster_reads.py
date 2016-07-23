@@ -151,7 +151,6 @@ def errorFreeReads(args):
             rightRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceRight, qualityRight)
     return leftRecord, rightRecord
 
-@profile
 def writingAndClusteringReads(outputprefix, minReadCount, h5_file, threads):
     # From index library, generate error free reads
     # using multicore to process read clusters
@@ -197,7 +196,6 @@ def errorFreeReadsDict(args):
         rightRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceRight, qualityRight)
     return leftRecord, rightRecord
 
-@profile
 def writingAndClusteringReadsDict(outputprefix, minReadCount, barcode_dict, threads):
     # From index library, generate error free reads
     # using multicore to process read clusters
