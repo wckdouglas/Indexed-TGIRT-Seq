@@ -1,3 +1,4 @@
+
 #/usr/bin/env python
 
 from scipy.spatial.distance import hamming
@@ -9,7 +10,7 @@ import seaborn as sns
 from sys import stderr
 import h5py
 import gzip
-from multiprocessing import Pool
+from multiprocessing import Pool, Manager
 from itertools import imap
 import shelve
 sns.set_style('white')
@@ -150,6 +151,7 @@ def errorFreeReads(args):
             rightRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceRight, qualityRight)
     return leftRecord, rightRecord
 
+@profile
 def writingAndClusteringReads(outputprefix, minReadCount, h5_file, threads):
     # From index library, generate error free reads
     # using multicore to process read clusters
@@ -195,6 +197,7 @@ def errorFreeReadsDict(args):
         rightRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceRight, qualityRight)
     return leftRecord, rightRecord
 
+@profile
 def writingAndClusteringReadsDict(outputprefix, minReadCount, barcode_dict, threads):
     # From index library, generate error free reads
     # using multicore to process read clusters
@@ -202,9 +205,8 @@ def writingAndClusteringReadsDict(outputprefix, minReadCount, barcode_dict, thre
     output_cluster_count = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
-    indexes = barcode_dict.iterkeys()
+    args =((np.array(table), index, minReadCount) for index,table in barcode_dict.iteritems())
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
-        args =((np.array(barcode_dict[index]), index, minReadCount) for index in indexes)
         pool = Pool(threads)
         processes = pool.imap_unordered(errorFreeReadsDict, args)
         #processes = imap(errorFreeReads, args)
