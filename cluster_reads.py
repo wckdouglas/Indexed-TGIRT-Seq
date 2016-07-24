@@ -11,7 +11,7 @@ from sys import stderr
 import h5py
 import gzip
 from multiprocessing import Pool, Manager
-from itertools import imap
+from itertools import imap,izip
 import shelve
 sns.set_style('white')
 minQ = 33
@@ -107,13 +107,13 @@ def plotBCdistribution(barcodeCount, outputprefix):
     stderr.write('Plotted %s.\n' %figurename)
     return 0
 
-def dictToh5File(barcodeDict, h5_file):
+def dictToh5File(barcode_dict, h5_file):
     """
     converting sequence dict to a h5 file for minimizing memory use
     """
     with h5py.File(h5_file,'w') as h5:
         group = h5.create_group('barcodes')
-        [group.create_dataset(index, data = index_family) for index, index_family in barcodeDict.iteritems()]
+        [group.create_dataset(index, data = index_family) for index, index_family in barcode_dict.iteritems()]
     print 'Finished writting %s'  %h5_file
     return 0
 
@@ -143,76 +143,39 @@ def errorFreeReads(args):
                   3. calculateConcensusBase
     """
     # skip if not enough sequences to perform voting
-    index, h5_file, minReadCount = args
-    leftRecord, rightRecord = 0, 0
-    with h5py.File(h5_file,'r') as h5:
-        table = h5['barcodes'][index]
-        member_count = table.shape[0]
-        if member_count >= minReadCount:
-            sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(table)
-            leftRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceLeft, qualityLeft)
-            rightRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceRight, qualityRight)
-    return leftRecord, rightRecord
-
-def writingAndClusteringReads(outputprefix, minReadCount, h5_file, threads):
-    # From index library, generate error free reads
-    # using multicore to process read clusters
-    counter = 0
-    output_cluster_count = 0
-    read1File = outputprefix + '_R1_001.fastq.gz'
-    read2File = outputprefix + '_R2_001.fastq.gz'
-    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
-        args = ((str(index).strip(), h5_file, minReadCount) for index in h5py.File(h5_file)['barcodes'].keys())
-        pool = Pool(threads)
-        processes = pool.imap_unordered(errorFreeReads, args, chunksize = 10000)
-        #processes = imap(errorFreeReads, args)
-        for p in processes:
-            counter += 1
-            if counter % 1000000 == 0:
-                stderr.write('Processed %i read clusters.\n' %(counter))
-            if p != (0,0):
-                leftRecord, rightRecord = p
-                read1.write('@cluster%i_%s' %(output_cluster_count, leftRecord))
-                read2.write('@cluster%i_%s' %(output_cluster_count, rightRecord))
-                output_cluster_count += 1
-    pool.close()
-    pool.join()
-    return output_cluster_count, read1File, read2File
-
-def errorFreeReadsDict(args):
-    """
-    main function for getting concensus sequences from read clusters.
-    return  a pair of concensus reads with a 4-line fastq format
-    see functions: 1. filterRead,
-                  2. concensusPairs,
-                  3. calculateConcensusBase
-    """
-    # skip if not enough sequences to perform voting
-    table, index, minReadCount = args
+    table, min_family_member_count = args
     leftRecord, rightRecord = 0, 0
     member_count = table.shape[0]
-    if member_count >= minReadCount:
+    if member_count >= min_family_member_count:
         sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(table)
-        leftRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceLeft, qualityLeft)
-        rightRecord = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequenceRight, qualityRight)
+        leftRecord = '%i_readCluster\n%s\n+\n%s\n' %(member_count, sequenceLeft, qualityLeft)
+        rightRecord = '%i_readCluster\n%s\n+\n%s\n' %(member_count, sequenceRight, qualityRight)
     return leftRecord, rightRecord
 
-def writingAndClusteringReadsDict(outputprefix, minReadCount, barcode_dict):
+@profile
+def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count):
     # From index library, generate error free reads
     # using multicore to process read clusters
+    threads = 12
     counter = 0
     output_cluster_count = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
-        args =((np.array(table), index, minReadCount) for index, table in barcode_dict.iteritems())
-        for p in imap(errorFreeReadsDict, args):
+        pool = Pool(threads)
+        indexes, tables = zip(*barcode_dict.iteritems())
+        del barcode_dict
+        args= ((np.array(table), min_family_member_count) for table in tables)
+        processes = pool.imap_unordered(errorFreeReads, args)
+        for result, index in izip(processes,indexes):
             counter += 1
             if counter % 1000000 == 0:
                 stderr.write('Processed %i read clusters.\n' %(counter))
-            if p != (0,0):
-                leftRecord, rightRecord = p
-                read1.write('@cluster%i_%s' %(output_cluster_count, leftRecord))
-                read2.write('@cluster%i_%s' %(output_cluster_count, rightRecord))
+            if result != (0,0):
+                leftRecord, rightRecord = result
+                read1.write('@cluster%i_%s_%s' %(output_cluster_count, index, leftRecord))
+                read2.write('@cluster%i_%s_%s' %(output_cluster_count, index, rightRecord))
                 output_cluster_count += 1
+        pool.close()
+        pool.join()
     return output_cluster_count, read1File, read2File
