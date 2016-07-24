@@ -1,7 +1,7 @@
 #!/bin/bash
 
-PROJECT_PATH=/corral-repl/utexas/2013lambowitz/Data/JA16381/combined
-DATA_PATH=$PROJECT_PATH
+PROJECT_PATH=/corral-repl/utexas/2013lambowitz/Data/JA16381
+DATA_PATH=$PROJECT_PATH/combined
 RESULT_PATH=$DATA_PATH/splitted
 SUFFIX=_R1_001.fastq.gz
 PROGRAM=read_cluster_pairs.py
