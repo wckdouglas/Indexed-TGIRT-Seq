@@ -67,11 +67,10 @@ def readClustering(read1, read2, barcodeDict, idxBase, barcodeCutOff, constant, 
 
 def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant):
     barcodeDict = defaultdict(list)
-    read_num = 0
+    read_num, discarded_sequence_count = 0, 0
     constant_length = len(constant)
     hamming_threshold = float(1)/constant_length
     usable_seq = idxBase + constant_length
-    discarded_sequence_count = 0
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
             discarded_sequence_count += readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
@@ -79,7 +78,9 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, cons
             read_num += 1
             if read_num % 1000000 == 0:
                 stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
-    stderr.write('[%s] Extracted: %i barcode sequences, discarded %i sequences\n' %(programname,len(barcodeDict.keys()), discarded_sequence_count))
+    stderr.write('[%s] Extracted: %i barcode group\n' %(programname,len(barcodeDict.keys())) +\
+                 '     discarded: %i sequences\n' %(discarded_sequence_count) +\
+                 '     Parsed:    %i seqeucnes' %(read_num))
     return barcodeDict, read_num
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, minReadCount, barcodeCutOff, constant, threads):
