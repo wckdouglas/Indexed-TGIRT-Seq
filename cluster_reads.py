@@ -152,11 +152,9 @@ def errorFreeReads(args):
         rightRecord = '%i_readCluster\n%s\n+\n%s\n' %(member_count, sequenceRight, qualityRight)
     return leftRecord, rightRecord
 
-@profile
-def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count):
+def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count, threads):
     # From index library, generate error free reads
     # using multicore to process read clusters
-    threads = 12
     counter = 0
     output_cluster_count = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
@@ -166,7 +164,7 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dic
         indexes, tables = zip(*barcode_dict.iteritems())
         del barcode_dict
         args= ((np.array(table), min_family_member_count) for table in tables)
-        processes = pool.imap_unordered(errorFreeReads, args)
+        processes = pool.imap_unordered(errorFreeReads, args, chunksize = barcode_count/threads)
         for result, index in izip(processes,indexes):
             counter += 1
             if counter % 1000000 == 0:

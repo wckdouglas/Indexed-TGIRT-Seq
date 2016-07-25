@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROJECT_PATH=/corral-repl/utexas/2013lambowitz/Data/JA16381/combined
+PROJECT_PATH=/stor/work/Lambowitz/Data/NGS/JA16381/combined
 DATA_PATH=$PROJECT_PATH
 RESULT_PATH=$DATA_PATH/splitted
 SUFFIX=_R1_001.fastq.gz
