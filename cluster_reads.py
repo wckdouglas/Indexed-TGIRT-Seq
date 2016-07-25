@@ -13,6 +13,7 @@ import gzip
 from multiprocessing import Pool, Manager
 from itertools import imap,izip
 import shelve
+from functools import partial
 sns.set_style('white')
 minQ = 33
 maxQ = 73
@@ -134,7 +135,7 @@ def concensusPairs(table):
     sequenceRight, qualityRight = concensusSeq(seq_right_list, qual_right_list, seq_right_length)
     return sequenceLeft, qualityLeft, sequenceRight, qualityRight
 
-def errorFreeReads(args):
+def errorFreeReads(min_family_member_count, table):
     """
     main function for getting concensus sequences from read clusters.
     return  a pair of concensus reads with a 4-line fastq format
@@ -143,14 +144,14 @@ def errorFreeReads(args):
                   3. calculateConcensusBase
     """
     # skip if not enough sequences to perform voting
-    index, table, min_family_member_count = args
+    table = np.array(table)
     leftRecord, rightRecord = 0, 0
     member_count = table.shape[0]
     if member_count >= min_family_member_count:
         sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(table)
         leftRecord = '%i_readCluster\n%s\n+\n%s\n' %(member_count, sequenceLeft, qualityLeft)
         rightRecord = '%i_readCluster\n%s\n+\n%s\n' %(member_count, sequenceRight, qualityRight)
-    return leftRecord, rightRecord, index
+    return leftRecord, rightRecord
 
 @profile
 def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count, threads):
@@ -162,13 +163,13 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dic
     read2File = outputprefix + '_R2_001.fastq.gz'
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         pool = Pool(threads)
-        barcode_dict = list(barcode_dict.iteritems())
-        args =  ((index, np.array(table), min_family_member_count) for index, table in barcode_dict)
-        processes = pool.imap_unordered(errorFreeReads, args, chunksize = barcode_count/threads)
-        for result in processes:
+        func = partial(errorFreeReads, min_family_member_count)
+        iterable = barcode_dict.itervalues()
+        processes = pool.imap_unordered(func, iterable , chunksize = barcode_count/threads)
+        for result, index in izip(processes, barcode_dict.iterkeys()):
             counter += 1
             if result != (0,0):
-                leftRecord, rightRecord, index = result
+                leftRecord, rightRecord = result
                 read1.write('@cluster%i_%s_%s' %(output_cluster_count, index, leftRecord))
                 read2.write('@cluster%i_%s_%s' %(output_cluster_count, index, rightRecord))
                 output_cluster_count += 1

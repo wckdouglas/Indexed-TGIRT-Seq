@@ -19,7 +19,7 @@ do
 		--barcodeCutOff 30 \
 	    --cutoff=0 \
 		--constant_region=CATCG \
-		--threads 24
+		--threads 12
 done
 
 #PROGRAM=double_index_cluster.py
