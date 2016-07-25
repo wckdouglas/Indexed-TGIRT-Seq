@@ -32,16 +32,18 @@ def getOptions():
         help='Paired end Fastq file 2 with four line/record')
     parser.add_argument('-m', '--cutoff', type=int,default=4,
         help="minimum read count for each read cluster (default: 4)")
-    parser.add_argument("-x", "--idx_base", type=int, default=13,
+    parser.add_argument("-x", "--idxBase", type=int, default=13,
         help="how many base in 5' end as index? (default: 13)")
     parser.add_argument('-q', '--barcodeCutOff', type=int, default=30,
         help="Average base calling quality for barcode sequence (default=30)")
     parser.add_argument("-c", "--constant_region", default='CATCG',
             help="Constant sequence after tags (default: CATCG ,e.g. Douglas's index-R1R)")
+    parser.add_argument("-t", "--threads", type=int,default=1,
+            help="Threads to use (deflaut: 1)")
     args = parser.parse_args()
     return args
 
-def readClustering(read1, read2, barcode_dict, idx_base, barcodeCutOff, constant, constant_length, hamming_threshold, usable_seq):
+def readClustering(read1, read2, barcode_dict, idx_base, barcode_cut_off, constant, constant_length, hamming_threshold, usable_seq):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
@@ -53,7 +55,7 @@ def readClustering(read1, read2, barcode_dict, idx_base, barcodeCutOff, constant
     constant_region = seqLeft[idx_base:usable_seq]
     barcodeQualmean = int(np.mean(map(ord,qualLeft[:idx_base])) - 33)
     if ('N' not in barcode \
-            and barcodeQualmean > barcodeCutOff \
+            and barcodeQualmean > barcode_cut_off \
             and hammingDistance(constant, constant_region) <= hamming_threshold): #\
             #and not any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']):
         seqLeft = seqLeft[usable_seq:]
@@ -62,7 +64,7 @@ def readClustering(read1, read2, barcode_dict, idx_base, barcodeCutOff, constant
         return 0
     return 1
 
-def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcodeCutOff, constant):
+def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, constant):
     barcode_dict = defaultdict(list)
     read_num, discarded_sequence_count = 0, 0
     constant_length = len(constant)
@@ -70,7 +72,7 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcodeCutOff, con
     usable_seq = idx_base + constant_length
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
-            discarded_sequence_count += readClustering(read1,read2,barcode_dict, idx_base, barcodeCutOff,
+            discarded_sequence_count += readClustering(read1,read2,barcode_dict, idx_base, barcode_cut_off,
                     constant, constant_length, hamming_threshold, usable_seq)
             read_num += 1
             if read_num % 1000000 == 0:
@@ -81,11 +83,11 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcodeCutOff, con
                  '[%s] Parsed:    %i seqeucnes\n' %(programname, read_num))
     return barcode_dict, read_num, barcode_count
 
-def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcodeCutOff, constant):
-    barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcodeCutOff, constant)
+def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant, threads):
+    barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, constant)
     barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
     p = plotBCdistribution(barcode_member_counts, outputprefix)
-    output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count)
+    output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count, threads)
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)
     stderr.write('[%s] [Summary]                        \n' %programname)
@@ -107,21 +109,22 @@ def main(args):
     outputprefix = args.outputprefix
     inFastq1 = args.fastq1
     inFastq2 = args.fastq2
-    idx_base = args.idx_base
+    idx_base = args.idxBase
     min_family_member_count = args.cutoff
-    barcodeCutOff = args.barcodeCutOff
+    barcode_cut_off = args.barcodeCutOff
     constant = args.constant_region
+    threads = args.threads
 
     #print out parameters
     stderr.write('[%s] [Parameters] \n' %(programname))
     stderr.write('[%s] indexed bases:                     %i\n' %(programname,idx_base))
-    #stderr.write('[%s] Threads:                           %i\n' %(programname,threads))
+    stderr.write('[%s] Threads:                           %i\n' %(programname,threads))
     stderr.write('[%s] minimum coverage:                  %i\n' %(programname,min_family_member_count))
     stderr.write('[%s] outputPrefix:                      %s\n' %(programname,outputprefix))
     stderr.write('[%s] using constant regions:   %s\n' %(programname,constant))
 
     # divide reads into subclusters
-    clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcodeCutOff, constant)
+    clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant, threads)
     stderr.write('[%s] time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
 
