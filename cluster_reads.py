@@ -153,7 +153,6 @@ def errorFreeReads(min_family_member_count, table):
         rightRecord = '%i_readCluster\n%s\n+\n%s\n' %(member_count, sequenceRight, qualityRight)
     return leftRecord, rightRecord
 
-@profile
 def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count, threads):
     # From index library, generate error free reads
     # using multicore to process read clusters
