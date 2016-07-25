@@ -15,23 +15,24 @@ from itertools import imap,izip
 import shelve
 from functools import partial
 sns.set_style('white')
-minQ = 33
-maxQ = 73
-maxProb = 0.999999
+min_q = 33
+max_q = 73
+max_prob = 0.999999
+acceptable_bases = np.array(['A','C','T','G'], dtype='string')
 
-def qual2Prob(q):
+def qual2Prob(base_qual):
     '''
     Given a q list,
     return a list of prob
     '''
-    return np.power(10, np.true_divide(-q,10))
+    return np.power(10, np.true_divide(-base_qual,10))
 
-def calculatePosterior(guessBase, columnBases, qualities):
-    qualHit = qualities[columnBases==guessBase]
-    qualMissed = qualities[columnBases!=guessBase]
-    if len(qualMissed) > 0:
-        hit = np.prod(1- qual2Prob(qualHit)) if len(qualHit) > 0 else 0
-        missed = np.prod(np.true_divide(qual2Prob(qualMissed),3))
+def calculatePosterior(column_bases, column_qualities, guess_base):
+    qual_hit = column_qualities[column_bases==guess_base]
+    qual_missed = column_qualities[column_bases!=guess_base]
+    if len(qual_missed) > 0:
+        hit = np.prod(1- qual2Prob(qual_hit)) if len(qual_hit) > 0 else 0
+        missed = np.prod(np.true_divide(qual2Prob(qual_missed),3))
         posterior = missed * hit
     else:
         posterior = 1
@@ -44,54 +45,54 @@ def calculateConcensusBase(arg):
     return the maximum likelihood base at the given position,
         along with the mean quality of these concensus bases.
     """
-    seqList, qualList, pos = arg
-    no_of_reads = len(seqList)
-    acceptable_bases = np.array(['A','C','T','G'], dtype='string')
-    columnBases = np.empty(no_of_reads,dtype='string')
-    qualities = np.empty(no_of_reads,dtype=np.int8)
-    for seq, qual, i  in zip(seqList, qualList, range(no_of_reads)):
-        columnBases[i] = seq[pos]
-        qualities[i] = ord(qual[pos]) -33
-    posteriors = [calculatePosterior(guessBase, columnBases, qualities) for guessBase in acceptable_bases]
+    seq_list, qual_list, pos = arg
+    no_of_reads = len(seq_list)
+    column_bases = np.empty(no_of_reads,dtype='string')
+    column_qualities = np.zeros(no_of_reads,dtype=np.int8)
+    for seq_string, qual_string, i in zip(seq_list, qual_list, xrange(no_of_reads)):
+        column_bases[i] = seq_string[pos]
+        column_qualities[i] = ord(qual_string[pos]) -33
+    posteriors = [calculatePosterior(column_bases, column_qualities, guess_base) for guess_base in acceptable_bases]
     likelihoods = np.true_divide(posteriors, np.sum(posteriors))
-    argMaxLikHood = np.argmax(likelihoods)
-    concensusBase = acceptable_bases[argMaxLikHood]
-    posterior = posteriors[argMaxLikHood]
-    return concensusBase, posterior
+    arg_max_likelihood = np.argmax(likelihoods)
+    concensus_base = acceptable_bases[arg_max_likelihood]
+    posterior = posteriors[arg_max_likelihood]
+    return concensus_base, posterior
 
 def qualString(posteriors):
     posteriors = np.array(posteriors, dtype=np.float32)
-    posteriors[posteriors > maxProb] = maxProb
+    posteriors[posteriors > max_prob] = max_prob
     quality =  -10 * np.log10(1 - posteriors)
     quality = np.array(quality,dtype=np.int8) + 33
-    quality[quality<minQ] = minQ
-    quality[quality > maxQ] = maxQ
+    quality[quality<min_q] = min_q
+    quality[quality > max_q] = max_q
     quality = ''.join(map(chr,quality))
     return quality
 
-def concensusSeq(seqList, qualList, positions):
+def concensusSeq(seq_list, qual_list):
     """given a list of sequences, a list of quality and sequence length.
         assertion: all seq in seqlist should have same length (see function: selectSeqLength)
     return a consensus sequence and the mean quality line (see function: calculateConcensusBase)
     """
-    if len(seqList) > 1:
-        concensusPosition = map(calculateConcensusBase,[(seqList, qualList, pos) for pos in positions])
-        bases, posteriors = zip(*concensusPosition)
+    if len(seq_list) > 1:
+        seq_len = len(seq_list[0])
+        concensus_position = map(calculateConcensusBase,[(seq_list, qual_list, pos) for pos in xrange(seq_len)])
+        bases, posteriors = zip(*concensus_position)
         sequence = ''.join(list(bases))
         quality = qualString(posteriors)
     else:
-        sequence = seqList[0]
-        quality = qualList[0]
+        sequence = seq_list[0]
+        quality = qual_list[0]
     return sequence, quality
 
 def hammingDistance(expected_constant, constant_region):
     dist = hamming(list(expected_constant),list(constant_region))
     return dist
 
-def plotBCdistribution(barcodeCount, outputprefix):
+def plotBCdistribution(barcode_family_count, outputprefix):
     #plotting inspection of barcode distribution
-    barcodeCount = np.array(barcodeCount, dtype=np.int64)
-    hist, bins = np.histogram(barcodeCount[barcodeCount<50],bins=50)
+    barcode_family_count = np.array(barcode_family_count, dtype=np.int64)
+    hist, bins = np.histogram(barcode_family_count[barcode_family_count<50],bins=50)
     centers = (bins[:-1] + bins[1:]) / 2
     width = 0.7 * (bins[1] - bins[0])
     figurename = '%s.pdf' %(outputprefix)
@@ -108,16 +109,6 @@ def plotBCdistribution(barcodeCount, outputprefix):
     stderr.write('Plotted %s.\n' %figurename)
     return 0
 
-def dictToh5File(barcode_dict, h5_file):
-    """
-    converting sequence dict to a h5 file for minimizing memory use
-    """
-    with h5py.File(h5_file,'w') as h5:
-        group = h5.create_group('barcodes')
-        [group.create_dataset(index, data = index_family) for index, index_family in barcode_dict.iteritems()]
-    print 'Finished writting %s'  %h5_file
-    return 0
-
 def concensusPairs(table):
     """ given a pair of reads as defined as the class: seqRecord
     return concensus sequence and mean quality of the pairs,
@@ -127,13 +118,12 @@ def concensusPairs(table):
     #extract table
     seq_left_list, qual_left_list = table[:,0], table[:,2]
     seq_right_list, qual_right_list = table[:,1], table[:,3]
-    seq_left_length, seq_right_length = range(len(table[:,0][0])), range(len(table[:,1][0]))
 
     # get concensus left reads first
-    sequenceLeft, qualityLeft = concensusSeq(seq_left_list, qual_left_list, seq_left_length)
+    sequence_left, quality_left = concensusSeq(seq_left_list, qual_left_list)
     # get concensus right reads
-    sequenceRight, qualityRight = concensusSeq(seq_right_list, qual_right_list, seq_right_length)
-    return sequenceLeft, qualityLeft, sequenceRight, qualityRight
+    sequence_right, quality_right = concensusSeq(seq_right_list, qual_right_list)
+    return sequence_left, quality_left, sequence_right, quality_right
 
 def errorFreeReads(min_family_member_count, table):
     """
@@ -148,10 +138,10 @@ def errorFreeReads(min_family_member_count, table):
     leftRecord, rightRecord = 0, 0
     member_count = table.shape[0]
     if member_count >= min_family_member_count:
-        sequenceLeft, qualityLeft, sequenceRight, qualityRight = concensusPairs(table)
-        leftRecord = '%i_readCluster\n%s\n+\n%s\n' %(member_count, sequenceLeft, qualityLeft)
-        rightRecord = '%i_readCluster\n%s\n+\n%s\n' %(member_count, sequenceRight, qualityRight)
-    return leftRecord, rightRecord
+        sequence_left, quality_left, sequence_right, quality_right = concensusPairs(table)
+        left_record = '%i_readCluster\n%s\n+\n%s\n' %(member_count, sequence_left, quality_left)
+        right_record = '%i_readCluster\n%s\n+\n%s\n' %(member_count, sequence_right, quality_right)
+    return left_record, right_record
 
 def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count, threads):
     # From index library, generate error free reads
@@ -168,9 +158,9 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dic
         for result, index in izip(processes, barcode_dict.iterkeys()):
             counter += 1
             if result != (0,0):
-                leftRecord, rightRecord = result
-                read1.write('@cluster%i_%s_%s' %(output_cluster_count, index, leftRecord))
-                read2.write('@cluster%i_%s_%s' %(output_cluster_count, index, rightRecord))
+                left_record, right_record = result
+                read1.write('@cluster%i_%s_%s' %(output_cluster_count, index, left_record))
+                read2.write('@cluster%i_%s_%s' %(output_cluster_count, index, right_record))
                 output_cluster_count += 1
             if counter % 1000000 == 0:
                 stderr.write('Processed %i read clusters.\n' %(counter))
