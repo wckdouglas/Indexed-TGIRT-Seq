@@ -162,9 +162,9 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dic
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         pool = Pool(threads)
         func = partial(errorFreeReads, min_family_member_count)
-        dict_list = list(barcode_dict.iteritems())
-        processes = pool.imap_unordered(func, dict_list)
-        #processes = imap(func, iterable )
+        barcode_dict = barcode_dict.items()
+        #processes = pool.imap_unordered(func, iter(barcode_dict))
+        processes = imap(func, barcode_dict )
         for result in processes:
             counter += 1
             if result != (0,0):
