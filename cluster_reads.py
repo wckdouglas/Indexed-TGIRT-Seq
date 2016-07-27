@@ -132,7 +132,7 @@ def concensusPairs(table):
     sequence_right, quality_right = concensusSeq(seq_right_list, qual_right_list)
     return sequence_left, quality_left, sequence_right, quality_right
 
-def errorFreeReads(min_family_member_count, record):
+def errorFreeReads(min_family_member_count, item):
     """
     main function for getting concensus sequences from read clusters.
     return  a pair of concensus reads with a 4-line fastq format
@@ -141,9 +141,9 @@ def errorFreeReads(min_family_member_count, record):
                   3. calculateConcensusBase
     """
     # skip if not enough sequences to perform voting
-    index, table = record
-    table = np.array(table)
+    index, table = item
     leftRecord, rightRecord = 0, 0
+    table = np.array(table)
     member_count = table.shape[0]
     if member_count >= min_family_member_count:
         sequence_left, quality_left, sequence_right, quality_right = concensusPairs(table)
@@ -151,6 +151,7 @@ def errorFreeReads(min_family_member_count, record):
         right_record = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequence_right, quality_right)
     return left_record, right_record
 
+@profile
 def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count, threads):
     # From index library, generate error free reads
     # using multicore to process read clusters
@@ -161,8 +162,8 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dic
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         pool = Pool(threads)
         func = partial(errorFreeReads, min_family_member_count)
-        iterable = barcode_dict.iteritems()
-        processes = pool.imap_unordered(func, iterable , chunksize = barcode_count/threads)
+        dict_list = list(barcode_dict.iteritems())
+        processes = pool.imap_unordered(func, dict_list)
         #processes = imap(func, iterable )
         for result in processes:
             counter += 1
