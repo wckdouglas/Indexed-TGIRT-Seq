@@ -162,7 +162,7 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dic
         pool = Pool(threads)
         func = partial(errorFreeReads, min_family_member_count)
         iterable = barcode_dict.iteritems()
-        processes = pool.imap_unordered(func, iterable , chunksize = barcode_count/threads)
+        processes = pool.imap_unordered(func, iterable)
         #processes = imap(func, iterable )
         for result in processes:
             counter += 1
