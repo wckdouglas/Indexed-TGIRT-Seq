@@ -209,7 +209,7 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_cou
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         func = partial(errorFreeReads, min_family_member_count)
         with open(json_file,'r') as f:
-            pool = Pool(12)
+            pool = Pool(threads)
             processes = pool.imap(func, f)
             for result in processes:
                 counter += 1
