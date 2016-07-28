@@ -132,7 +132,14 @@ def concensusPairs(table):
     sequence_right, quality_right = concensusSeq(seq_right_list, qual_right_list)
     return sequence_left, quality_left, sequence_right, quality_right
 
-def errorFreeReads(min_family_member_count, item):
+def dictToJson(barcode_dict, outputprefix):
+    json_file = outputprefix + '.json'
+    with open(json_file,'w') as f:
+        [f.write(json.dumps(item)+'\n') for item in barcode_dict.iteritems()]
+    stderr.write('Written %s' %json_file)
+    return json_file
+
+def errorFreeReads(min_family_member_count, record):
     """
     main function for getting concensus sequences from read clusters.
     return  a pair of concensus reads with a 4-line fastq format
@@ -141,8 +148,8 @@ def errorFreeReads(min_family_member_count, item):
                   3. calculateConcensusBase
     """
     # skip if not enough sequences to perform voting
-    index, table = item
-    leftRecord, rightRecord = 0, 0
+    index, table = record
+    left_record, right_record = 0, 0
     table = np.array(table)
     member_count = table.shape[0]
     if member_count >= min_family_member_count:
@@ -151,7 +158,7 @@ def errorFreeReads(min_family_member_count, item):
         right_record = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequence_right, quality_right)
     return left_record, right_record
 
-def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count, threads):
+def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count):
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = 0
@@ -159,11 +166,8 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dic
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
-#        pool = Pool(threads)
         func = partial(errorFreeReads, min_family_member_count)
-        barcode_dict = barcode_dict.items()
-        #processes = pool.imap_unordered(func, iter(barcode_dict))
-        processes = imap(func, barcode_dict )
+        processes = imap(func, barcode_dict.iteritems())
         for result in processes:
             counter += 1
             if result != (0,0):
@@ -173,6 +177,4 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dic
                 output_cluster_count += 1
             if counter % 1000000 == 0:
                 stderr.write('Processed %i read clusters.\n' %(counter))
-#        pool.close()
-#        pool.join()
     return output_cluster_count, read1File, read2File
