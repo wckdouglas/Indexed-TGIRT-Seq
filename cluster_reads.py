@@ -8,7 +8,7 @@ matplotlib.use('Agg')  # Must be before importing matplotlib.pyplot or pylab
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sys import stderr
-import h5py
+import json
 import gzip
 from multiprocessing import Pool, Manager
 from itertools import imap,izip
@@ -132,6 +132,52 @@ def concensusPairs(table):
     sequence_right, quality_right = concensusSeq(seq_right_list, qual_right_list)
     return sequence_left, quality_left, sequence_right, quality_right
 
+def dictToJson(barcode_dict, outputprefix):
+    with open(outputprefix+'.json','w') as f:
+        for items in barcode_dict.iteritems():
+            f.write(json.dumps(items) + '\n')
+    print 'written %s.json' %(outputprefix)
+
+#def errorFreeReads(min_family_member_count, record):
+##    """
+##    main function for getting concensus sequences from read clusters.
+##    return  a pair of concensus reads with a 4-line fastq format
+##    see functions: 1. filterRead,
+##                  2. concensusPairs,
+##                  3. calculateConcensusBase
+##    """
+##    # skip if not enough sequences to perform voting
+##    index, table = record
+##    left_record, right_record = 0, 0
+##    table = np.array(table)
+##    member_count = table.shape[0]
+##    if member_count >= min_family_member_count:
+##        sequence_left, quality_left, sequence_right, quality_right = concensusPairs(table)
+##        left_record = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequence_left, quality_left)
+##        right_record = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequence_right, quality_right)
+##    return left_record, right_record
+##
+##def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count):
+##    # From index library, generate error free reads
+##    # using multicore to process read clusters
+##    counter = 0
+##    output_cluster_count = 0
+##    read1File = outputprefix + '_R1_001.fastq.gz'
+##    read2File = outputprefix + '_R2_001.fastq.gz'
+##    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
+##        func = partial(errorFreeReads, min_family_member_count)
+##        processes = imap(func, barcode_dict.iteritems())
+##        for result in processes:
+##            counter += 1
+##            if result != (0,0):
+##                left_record, right_record = result
+##                read1.write('@cluster%i_%s' %(output_cluster_count, left_record))
+##                read2.write('@cluster%i_%s' %(output_cluster_count, right_record))
+##                output_cluster_count += 1
+##            if counter % 1000000 == 0:
+##                stderr.write('Processed %i read clusters.\n' %(counter))
+##    return output_cluster_count, read1File, read2File
+#
 def errorFreeReads(min_family_member_count, record):
     """
     main function for getting concensus sequences from read clusters.
@@ -141,9 +187,10 @@ def errorFreeReads(min_family_member_count, record):
                   3. calculateConcensusBase
     """
     # skip if not enough sequences to perform voting
-    index, table = record
     left_record, right_record = 0, 0
-    table = np.array(table)
+    record = json.loads(record)
+    index = record[0]
+    table = np.array(record[1])
     member_count = table.shape[0]
     if member_count >= min_family_member_count:
         sequence_left, quality_left, sequence_right, quality_right = concensusPairs(table)
@@ -151,23 +198,26 @@ def errorFreeReads(min_family_member_count, record):
         right_record = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequence_right, quality_right)
     return left_record, right_record
 
-def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count):
+@profile
+def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_count):
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = 0
     output_cluster_count = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
+    json_file = outputprefix + '.json'
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         func = partial(errorFreeReads, min_family_member_count)
-        processes = imap(func, barcode_dict.iteritems())
-        for result in processes:
-            counter += 1
-            if result != (0,0):
-                left_record, right_record = result
-                read1.write('@cluster%i_%s' %(output_cluster_count, left_record))
-                read2.write('@cluster%i_%s' %(output_cluster_count, right_record))
-                output_cluster_count += 1
-            if counter % 1000000 == 0:
-                stderr.write('Processed %i read clusters.\n' %(counter))
+        with open(json_file,'r') as f:
+            processes = Pool(12).imap(func, f)
+            for result in processes:
+                counter += 1
+                if result != (0,0):
+                    left_record, right_record = result
+                    read1.write('@cluster%i_%s' %(output_cluster_count, left_record))
+                    read2.write('@cluster%i_%s' %(output_cluster_count, right_record))
+                    output_cluster_count += 1
+                    if counter % 1000000 == 0:
+                        stderr.write('Processed %i read clusters.\n' %(counter))
     return output_cluster_count, read1File, read2File
