@@ -133,10 +133,11 @@ def concensusPairs(table):
     return sequence_left, quality_left, sequence_right, quality_right
 
 def dictToJson(barcode_dict, outputprefix):
-    with open(outputprefix+'.json','w') as f:
-        for items in barcode_dict.iteritems():
-            f.write(json.dumps(items) + '\n')
-    print 'written %s.json' %(outputprefix)
+    json_file = outputprefix+'.json'
+    with open(json_file,'w') as f:
+        [f.write(json.dumps(items) + '\n') for items in barcode_dict.iteritems()]
+    stderr.write('written %s.json' %(outputprefix) + '\n')
+    return json_file
 
 #def errorFreeReads(min_family_member_count, record):
 ##    """
@@ -199,14 +200,13 @@ def errorFreeReads(min_family_member_count, record):
     return left_record, right_record
 
 @profile
-def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_count):
+def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_count, json_file):
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = 0
     output_cluster_count = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
-    json_file = outputprefix + '.json'
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         func = partial(errorFreeReads, min_family_member_count)
         with open(json_file,'r') as f:
