@@ -5,7 +5,7 @@ DATA_PATH=$PROJECT_PATH/combined
 RESULT_PATH=$DATA_PATH/splitted
 SUFFIX=_R1_001.fastq.gz
 PROGRAM=read_cluster_pairs.py
-THREADS=12
+THREADS=48
 mkdir -p  $RESULT_PATH
 
 for FQ1 in `ls $DATA_PATH/*${SUFFIX}`
