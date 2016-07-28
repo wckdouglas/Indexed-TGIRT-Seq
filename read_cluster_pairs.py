@@ -62,8 +62,7 @@ def readClustering(read1, read2, barcode_dict, idx_base, barcode_cut_off, consta
         return 0
     return 1
 
-def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, constant):
-    barcode_dict = defaultdict(list)
+def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, constant, barcode_dict):
     read_num, discarded_sequence_count = 0, 0
     constant_length = len(constant)
     hamming_threshold = float(1)/constant_length
@@ -82,10 +81,14 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, c
     return barcode_dict, read_num, barcode_count
 
 def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant):
-    barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, constant)
+    barcode_dict = defaultdict(list)
+    barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, constant, barcode_dict)
     barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
     p = plotBCdistribution(barcode_member_counts, outputprefix)
-    output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count)
+    dictToJson(barcode_dict, outputprefix)
+    barcode_dict.clear()
+    #output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count)
+    output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, barcode_count)
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)
     stderr.write('[%s] [Summary]                        \n' %programname)
