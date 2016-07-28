@@ -38,8 +38,6 @@ def getOptions():
         help="Average base calling quality for barcode sequence (default=30)")
     parser.add_argument("-c", "--constant_region", default='CATCG',
             help="Constant sequence after tags (default: CATCG ,e.g. Douglas's index-R1R)")
-    parser.add_argument("-t", "--threads", type=int,default=1,
-            help="Threads to use (deflaut: 1)")
     args = parser.parse_args()
     return args
 
@@ -83,11 +81,11 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, c
                  '[%s] Parsed:    %i seqeucnes\n' %(programname, read_num))
     return barcode_dict, read_num, barcode_count
 
-def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant, threads):
+def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant):
     barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, constant)
     barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
     p = plotBCdistribution(barcode_member_counts, outputprefix)
-    output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count, threads)
+    output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count)
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)
     stderr.write('[%s] [Summary]                        \n' %programname)
@@ -113,18 +111,16 @@ def main(args):
     min_family_member_count = args.cutoff
     barcode_cut_off = args.barcodeCutOff
     constant = args.constant_region
-    threads = args.threads
 
     #print out parameters
     stderr.write('[%s] [Parameters] \n' %(programname))
     stderr.write('[%s] indexed bases:                     %i\n' %(programname,idx_base))
-    stderr.write('[%s] Threads:                           %i\n' %(programname,threads))
     stderr.write('[%s] minimum coverage:                  %i\n' %(programname,min_family_member_count))
     stderr.write('[%s] outputPrefix:                      %s\n' %(programname,outputprefix))
     stderr.write('[%s] using constant regions:   %s\n' %(programname,constant))
 
     # divide reads into subclusters
-    clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant, threads)
+    clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant)
     stderr.write('[%s] time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
 
