@@ -199,7 +199,11 @@ def errorFreeReads(min_family_member_count, record):
         right_record = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequence_right, quality_right)
     return left_record, right_record
 
+<<<<<<< HEAD
 def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_count, json_file):
+=======
+def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_count, json_file, threads):
+>>>>>>> 5e0a4f555422c53ed66dfcd80f735d76d33b4649
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = 0
@@ -209,7 +213,8 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_cou
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         func = partial(errorFreeReads, min_family_member_count)
         with open(json_file,'r') as f:
-            processes = Pool(12).imap(func, f)
+            pool = Pool(12)
+            processes = pool.imap(func, f)
             for result in processes:
                 counter += 1
                 if result != (0,0):
@@ -219,4 +224,6 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_cou
                     output_cluster_count += 1
                     if counter % 1000000 == 0:
                         stderr.write('Processed %i read clusters.\n' %(counter))
+        pool.close()
+        poo.join()
     return output_cluster_count, read1File, read2File
