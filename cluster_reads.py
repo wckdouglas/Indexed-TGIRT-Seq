@@ -133,18 +133,11 @@ def concensusPairs(table):
     return sequence_left, quality_left, sequence_right, quality_right
 
 def dictToJson(barcode_dict, outputprefix):
-<<<<<<< HEAD
     json_file = outputprefix + '.json'
     with open(json_file,'w') as f:
         [f.write(json.dumps(item)+'\n') for item in barcode_dict.iteritems()]
-    stderr.write('Written %s' %json_file)
+    stderr.write('written %s.json' %(outputprefix) + '\n')
     return json_file
-
-=======
-    with open(outputprefix+'.json','w') as f:
-        for items in barcode_dict.iteritems():
-            f.write(json.dumps(items) + '\n')
-    print 'written %s.json' %(outputprefix)
 
 #def errorFreeReads(min_family_member_count, record):
 ##    """
@@ -186,7 +179,6 @@ def dictToJson(barcode_dict, outputprefix):
 ##                stderr.write('Processed %i read clusters.\n' %(counter))
 ##    return output_cluster_count, read1File, read2File
 #
->>>>>>> 842a5088db458f5bc22966f39b529483fe7071f8
 def errorFreeReads(min_family_member_count, record):
     """
     main function for getting concensus sequences from read clusters.
@@ -207,15 +199,13 @@ def errorFreeReads(min_family_member_count, record):
         right_record = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequence_right, quality_right)
     return left_record, right_record
 
-@profile
-def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_count):
+def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_count, json_file):
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = 0
     output_cluster_count = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
-    json_file = outputprefix + '.json'
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
         func = partial(errorFreeReads, min_family_member_count)
         with open(json_file,'r') as f:
