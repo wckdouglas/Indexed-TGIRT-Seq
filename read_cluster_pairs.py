@@ -1,3 +1,4 @@
+
 #!/bin/env python
 
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
@@ -86,7 +87,6 @@ def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_cou
     barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, constant, barcode_dict)
     barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
     p = plotBCdistribution(barcode_member_counts, outputprefix)
-    barcode_count = 186078
     json_file = outputprefix+'.json'
     dictToJson(barcode_dict, json_file)
     barcode_dict.clear()
