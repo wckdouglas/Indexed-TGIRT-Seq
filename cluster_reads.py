@@ -132,12 +132,11 @@ def concensusPairs(table):
     sequence_right, quality_right = concensusSeq(seq_right_list, qual_right_list)
     return sequence_left, quality_left, sequence_right, quality_right
 
-def dictToJson(barcode_dict, outputprefix):
-    json_file = outputprefix + '.json'
+def dictToJson(barcode_dict, json_file):
     with open(json_file,'w') as f:
         [f.write(cjson.encode(items) + '\n') for items in barcode_dict.iteritems()]
-    stderr.write('written %s.json' %(outputprefix) + '\n')
-    return json_file
+    stderr.write('written %s' %(json_file) + '\n')
+    return 0
 
 def errorFreeReads(min_family_member_count, record):
     """
@@ -148,7 +147,6 @@ def errorFreeReads(min_family_member_count, record):
                   3. calculateConcensusBase
     """
     # skip if not enough sequences to perform voting
-    left_record, right_record = 0, 0
     record = cjson.decode(record)
     index = record[0]
     table = np.array(record[1])
@@ -157,30 +155,28 @@ def errorFreeReads(min_family_member_count, record):
         sequence_left, quality_left, sequence_right, quality_right = concensusPairs(table)
         left_record = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequence_left, quality_left)
         right_record = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequence_right, quality_right)
-    return left_record, right_record
+        return left_record, right_record
+    else:
+        return 'No'
 
-@profile
-def writingAndClusteringReads(outputprefix, min_family_member_count, barcode_count, json_file, threads):
+def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, barcode_count,threads):
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = 0
     output_cluster_count = 0
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
-    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2:
+    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2,open(json_file,'r') as infile:
         func = partial(errorFreeReads, min_family_member_count)
-        with open(json_file,'r',2048) as f:
-            pool = Pool(threads)
-            processes = pool.imap(func, f, chunksize = barcode_count/threads)
-            for result in processes:
-                counter += 1
-                if result != (0,0):
-                    left_record, right_record = result
-                    read1.write('@cluster%i_%s' %(output_cluster_count, left_record))
-                    read2.write('@cluster%i_%s' %(output_cluster_count, right_record))
-                    output_cluster_count += 1
-                    if counter % 1000000 == 0:
-                        stderr.write('Processed %i read clusters.\n' %(counter))
+        pool = Pool(threads,maxtasksperchild=100)
+        for result in pool.imap_unordered(func, infile, chunksize = 1000):
+            if result != 'No':
+                read1.write('@cluster%i_%s' %(output_cluster_count, result[0]))
+                read2.write('@cluster%i_%s' %(output_cluster_count, result[1]))
+                output_cluster_count += 1
+            counter += 1
+            if counter % 1000000 == 0:
+                stderr.write('Processed %i read clusters.\n' %(counter))
         pool.close()
         pool.join()
     return output_cluster_count, read1File, read2File
