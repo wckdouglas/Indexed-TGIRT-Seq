@@ -159,7 +159,7 @@ def errorFreeReads(min_family_member_count, record):
     else:
         return 'No'
 
-def writeSeqToFiles(read1, read2, result):
+def writeSeqToFiles(read1, read2, result, output_cluster_count):
     if result!='No':
         read1.write('@cluster%i_%s' %(output_cluster_count, result[0]))
         read2.write('@cluster%i_%s' %(output_cluster_count, result[1]))
@@ -178,10 +178,10 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, 
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2,open(json_file,'r') as infile:
         error_func = partial(errorFreeReads, min_family_member_count)
         write_func = partial(writeSeqToFiles,read1, read2)
-        pool = Pool(threads,maxtasksperchild=10000)
-        processes = pool.imap_unordered(error_func, infile, chunksize = 100000)
+        pool = Pool(threads,maxtasksperchild=1000)
+        processes = pool.imap_unordered(error_func, infile, chunksize = 1000)
         for result in processes:
-            output_cluster_count += write_func(result)
+            output_cluster_count += write_func(result, output_cluster_count)
             counter += 1
             if counter % 1000000 == 0:
                 stderr.write('Processed %i read clusters.\n' %(counter))
