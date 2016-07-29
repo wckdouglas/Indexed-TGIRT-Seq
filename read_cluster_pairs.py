@@ -9,11 +9,10 @@ import glob
 import gzip
 import time
 import os
-from itertools import izip, imap, product
+from itertools import izip
 from multiprocessing import Pool
 from cluster_reads import *
 from collections import defaultdict
-import h5py
 programname = os.path.basename(sys.argv[0]).split('.')[0]
 
 def getOptions():
@@ -89,7 +88,6 @@ def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_cou
     p = plotBCdistribution(barcode_member_counts, outputprefix)
     json_file = dictToJson(barcode_dict, outputprefix)
     barcode_dict.clear()
-    #output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count)
     output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, barcode_count, json_file, threads)
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)
