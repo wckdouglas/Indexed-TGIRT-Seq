@@ -168,8 +168,8 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, 
     read2File = outputprefix + '_R2_001.fastq.gz'
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2,open(json_file,'r') as infile:
         func = partial(errorFreeReads, min_family_member_count)
-        pool = Pool(threads,maxtasksperchild=100)
-        for result in pool.imap_unordered(func, infile, chunksize = 1000):
+        pool = Pool(threads,maxtasksperchild=10000)
+        for result in pool.imap_unordered(func, infile, chunksize = 100000):
             if result != 'No':
                 read1.write('@cluster%i_%s' %(output_cluster_count, result[0]))
                 read2.write('@cluster%i_%s' %(output_cluster_count, result[1]))

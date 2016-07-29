@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROJECT_PATH=/corral-repl/utexas/2013lambowitz/Data/JA16381
+PROJECT_PATH=$WORK/Data/NGS/JA16381
 DATA_PATH=$PROJECT_PATH/combined
 RESULT_PATH=$DATA_PATH/splitted
 SUFFIX=_R1_001.fastq.gz
@@ -12,7 +12,7 @@ for FQ1 in `ls $DATA_PATH/*${SUFFIX}`
 do
 	SAMPLE_NAME=$(basename ${FQ1%$SUFFIX})
 	FQ2=${FQ1/R1/R2}
-	echo $(which python) -m memory_profiler $PROGRAM \
+	echo $(which python)  $PROGRAM \
 		--outputprefix ${RESULT_PATH}/${SAMPLE_NAME}-errorFree \
 	    --fastq1 ${FQ1} \
 		--fastq2 ${FQ2} \
