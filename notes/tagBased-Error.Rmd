@@ -10,12 +10,14 @@ output:
 
 This is a note for myself on the tag-based error correction program that I coded up (Figure 1). This is inspired from a combination of two works, [circ-seq](http://www.ncbi.nlm.nih.gov/pubmed/24243955) and [safe-seq](http://www.pnas.org/content/108/23/9530).
 
-# Grouping #
+![](indexed_tgirt.png)
+
+# Indexed R1R #
 
 For a given read 1, the first 13 bases is the index as below.
 
 <center>
-[GGAAGAGCACACG] TCT GAA CTC CAG TCA CAC TGA TAT CTC GTA TGC CGT CTT CTG CTT GAA AAA AAA AAGG GGG G
+CGA TG[N NNN NNN NNN NNN] TCT GAA CTC CAG TCA CAC TGA TAT CTC GTA TGC CGT CTT CTG CTT GAA AAA AAA AAGG GGG G
 </center>
 
 Reads with same index are grouped together in a dictionary (python).
@@ -43,13 +45,14 @@ For a give position in the read cluster $J$, read $i$, likelihood of identity of
 P(I=b | r_{j},Q_{j}) = \frac{\prod_i (P(I=b|r_{i, j},Q_{i, j}))}{\sum_{d \in \{A,C,T,G\}}\prod_i (P(I=d|r_{i, j},Q_{i, j}))}
 \]
 
-For the following example illutrated with **R**, if a position in a read cluster contains bad sequencing reads [C, C, C, C, A, A, A, C] with Phred scores [54, 54, 54, 33, 80, 80, 80, 42]:
+For the following example illutrated with **R**, if a position in a read cluster contains bad sequencing reads [T,A,A,A,A] with Phred scores [7,-,-,-,-]:
 
 ```{r warning = F, message = F }
 library(cowplot)
 
-q <- c(74,70,74) - 33
-b <- c('G','G','A')
+q <- c('7','-','-','-','-')
+q <- sapply(q,utf8ToInt) - 33
+b <- c('T','A','A','A','A')
 
 phred2prob <- function(q){
   return (10 ^ (-q / 10))
@@ -69,7 +72,6 @@ posteriorsDist <- posteriors/sum(posteriors)
 qplot(bases, posteriorsDist) + 
   geom_bar(stat='identity') +
   labs(x = ' ', y = 'Posterior Probability')
-
 ```
 
 # Maximum likelihood #
@@ -79,7 +81,7 @@ Q = -10log_{10} (1 - P(I=C | r_{j},Q_{j}))
 \]
 
 ```{r, echo =F }
-Quality = - 10 * log10(1 - posteriors[bases=='A']) 
+Quality = - 10 * log10(1 - posteriorsDist[bases=='A']) 
 ```
 
 In the above example, uncorrected quality score would be `r Quality`.
@@ -103,4 +105,4 @@ The corrected score for the above sample of a read base *C* would be: **`r intTo
 ![](http://www.omixon.com/wp-content/uploads/2013/06/illumina_fastq_coding.png)
 
 
-![](indexed_tgirt.png)
+
