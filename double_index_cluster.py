@@ -99,7 +99,10 @@ def clustering(outputprefix, inFastq1, inFastq2, idxBase, min_family_member_coun
     barcodeDict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant)
     barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
     p = plotBCdistribution(barcode_member_counts, outputprefix)
-    output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, barcode_dict, barcode_count, threads)
+    json_file = outputprefix+'.json'
+    dictToJson(barcode_dict, json_file)
+    barcode_dict.clear()
+    output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, json_file, barcode_count, threads)
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)
     stderr.write('[%s] [Summary]                        \n' %programname)
