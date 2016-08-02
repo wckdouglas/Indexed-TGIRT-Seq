@@ -97,7 +97,7 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, cons
     return barcode_dict, read_num, barcode_count
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, min_family_member_count,
-               barcodeCutOff, constant_left, constant_right):
+               barcodeCutOff, constant_left, constant_right, threads):
     barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant_left, constant_right)
     barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
     p = plotBCdistribution(barcode_member_counts, outputprefix)
@@ -143,7 +143,7 @@ def main(args):
     stderr.write( '[%s]     using constant regions right:      %s\n' %(programname,constant_right))
 
     # divide reads into subclusters
-    clustering(outputprefix, inFastq1, inFastq2, idxBase, min_family_member_count, barcodeCutOff, constant_left, constant_right)
+    clustering(outputprefix, inFastq1, inFastq2, idxBase, min_family_member_count, barcodeCutOff, constant_left, constant_right, threads)
     stderr.write('[%s]     time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
 
