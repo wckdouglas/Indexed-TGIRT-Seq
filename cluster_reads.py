@@ -12,7 +12,6 @@ import cjson
 import gzip
 from multiprocessing import Pool, Manager
 from itertools import imap,izip
-import shelve
 from functools import partial
 sns.set_style('white')
 min_q = 33
