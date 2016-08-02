@@ -11,6 +11,7 @@ import gzip
 import time
 import os
 from itertools import izip, imap
+from functools import partial
 from cluster_reads import *
 from collections import defaultdict
 programname = os.path.basename(sys.argv[0]).split('.')[0]
@@ -43,9 +44,9 @@ def getOptions():
     args = parser.parse_args()
     return args
 
-def readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
+def readClustering(barcode_dict, idxBase, barcodeCutOff,
                     constant_left, constant_right, constant_left_length, constant_right_length,
-                    hamming_left_threshold, hamming_right_threshold, usable_left_seq, usable_right_seq):
+                    hamming_left_threshold, hamming_right_threshold, usable_left_seq, usable_right_seq, read1, read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idxBases/ of read 1
@@ -68,12 +69,12 @@ def readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
         qualLeft = qualLeft[usable_left_seq:]
         seqRight = seqRight[usable_right_seq:]
         qualRight = qualRight[usable_right_seq:]
-        barcodeDict[index].append([seqLeft,seqRight,qualLeft, qualRight])
+        barcode_dict[index].append([seqLeft,seqRight,qualLeft, qualRight])
         return 0
     return 1
 
-def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant):
-    barcodeDict = defaultdict(list)
+def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant_left, constant_right):
+    barcode_dict = defaultdict(list)
     read_num,discarded_sequence_count = 0,0
     discarded_sequence_count = 0
     constant_left_length = len(constant_left)
@@ -82,21 +83,22 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, cons
     hamming_right_threshold = float(1)/constant_right_length
     usable_left_seq = idxBase + constant_left_length
     usable_right_seq = idxBase + constant_right_length
+    func = partial(readClustering, barcode_dict, idxBase, barcodeCutOff,
+                constant_left, constant_right, constant_left_length, constant_right_length,
+                hamming_left_threshold, hamming_right_threshold, usable_left_seq, usable_right_seq)
+
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
-        for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
-            discarded_sequence_count += readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
-                                constant_left, constant_right, constant_left_length, constant_right_length,
-                                hamming_left_threshold, hamming_right_threshold, usable_left_seq, usable_right_seq)
-            read_num += 1
+        iterator = enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)))
+        discarded_sequence_count = sum(func(read1,read2) for read_num, (read1,read2) in iterator)
     barcode_count = len(barcode_dict.keys())
     stderr.write('[%s] Extracted: %i barcode group\n' %(programname,barcode_count) +\
-                '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\
-                '[%s] Parsed:    %i seqeucnes\n' %(programname, read_num))
+                 '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\
+                 '[%s] Parsed:    %i seqeucnes\n' %(programname, read_num))
     return barcode_dict, read_num, barcode_count
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, min_family_member_count,
                barcodeCutOff, constant_left, constant_right):
-    barcodeDict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant)
+    barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant_left, constant_right)
     barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
     p = plotBCdistribution(barcode_member_counts, outputprefix)
     json_file = outputprefix+'.json'
@@ -136,8 +138,9 @@ def main(args):
     stderr.write( '[%s]     indexed bases:                     %i\n' %(programname,idxBase))
     stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,min_family_member_count))
     stderr.write( '[%s]     outputPrefix:                      %s\n' %(programname,outputprefix))
-    stderr.write( '[%s]     using constant regions left:   %s\n' %(programname,constant_left))
-    stderr.write( '[%s]     using constant regions right:   %s\n' %(programname,constant_right))
+    stderr.write( '[%s]     using constant regions left:       %s\n' %(programname,constant_left))
+    stderr.write( '[%s]     threads:                           %i\n' %(programname,threads))
+    stderr.write( '[%s]     using constant regions right:      %s\n' %(programname,constant_right))
 
     # divide reads into subclusters
     clustering(outputprefix, inFastq1, inFastq2, idxBase, min_family_member_count, barcodeCutOff, constant_left, constant_right)
