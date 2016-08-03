@@ -1,4 +1,3 @@
-
 #!/bin/env python
 
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
@@ -11,6 +10,7 @@ import gzip
 import time
 import os
 from itertools import izip, imap
+from functools import partial
 from cluster_reads import *
 from collections import defaultdict
 programname = os.path.basename(sys.argv[0]).split('.')[0]
@@ -43,9 +43,9 @@ def getOptions():
     args = parser.parse_args()
     return args
 
-def readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
-                    constant_left, constant_right, constant_left_length, constant_right_length,
-                    hamming_left_threshold, hamming_right_threshold, usable_left_seq, usable_right_seq):
+def readClustering(barcode_dict, idxBase, barcodeCutOff,constant_left, constant_right, 
+        constant_left_length, constant_right_length,hamming_left_threshold, hamming_right_threshold, 
+        usable_left_seq, usable_right_seq,read1,read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idxBases/ of read 1
@@ -68,12 +68,11 @@ def readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
         qualLeft = qualLeft[usable_left_seq:]
         seqRight = seqRight[usable_right_seq:]
         qualRight = qualRight[usable_right_seq:]
-        barcodeDict[index].append([seqLeft,seqRight,qualLeft, qualRight])
+        barcode_dict[index].append([seqLeft,seqRight,qualLeft, qualRight])
         return 0
     return 1
 
-def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant):
-    barcodeDict = defaultdict(list)
+def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant_right, constant_left, barcode_dict):
     read_num,discarded_sequence_count = 0,0
     discarded_sequence_count = 0
     constant_left_length = len(constant_left)
@@ -82,12 +81,12 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, cons
     hamming_right_threshold = float(1)/constant_right_length
     usable_left_seq = idxBase + constant_left_length
     usable_right_seq = idxBase + constant_right_length
+    dict_func = partial(readClustering, barcode_dict, idxBase, barcodeCutOff,
+                            constant_left, constant_right, constant_left_length, constant_right_length,
+                            hamming_left_threshold, hamming_right_threshold, usable_left_seq, usable_right_seq)
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
-        for read1,read2 in izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)):
-            discarded_sequence_count += readClustering(read1,read2,barcodeDict, idxBase, barcodeCutOff,
-                                constant_left, constant_right, constant_left_length, constant_right_length,
-                                hamming_left_threshold, hamming_right_threshold, usable_left_seq, usable_right_seq)
-            read_num += 1
+        for read_num, (read1, read2) in enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))):
+            discarded_sequence_count += dict_func(read1,read2)             
     barcode_count = len(barcode_dict.keys())
     stderr.write('[%s] Extracted: %i barcode group\n' %(programname,barcode_count) +\
                 '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\
@@ -95,8 +94,9 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, cons
     return barcode_dict, read_num, barcode_count
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, min_family_member_count,
-               barcodeCutOff, constant_left, constant_right):
-    barcodeDict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant)
+               barcodeCutOff, constant_left, constant_right, threads):
+    barcode_dict = defaultdict(list)
+    barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant_right, constant_left, barcode_dict)
     barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
     p = plotBCdistribution(barcode_member_counts, outputprefix)
     json_file = outputprefix+'.json'
@@ -140,7 +140,7 @@ def main(args):
     stderr.write( '[%s]     using constant regions right:   %s\n' %(programname,constant_right))
 
     # divide reads into subclusters
-    clustering(outputprefix, inFastq1, inFastq2, idxBase, min_family_member_count, barcodeCutOff, constant_left, constant_right)
+    clustering(outputprefix, inFastq1, inFastq2, idxBase, min_family_member_count, barcodeCutOff, constant_left, constant_right, threads)
     stderr.write('[%s]     time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
 
