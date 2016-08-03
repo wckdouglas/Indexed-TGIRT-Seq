@@ -1,4 +1,3 @@
-
 #!/bin/env python
 
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
@@ -44,9 +43,9 @@ def getOptions():
     args = parser.parse_args()
     return args
 
-def readClustering(barcode_dict, idxBase, barcodeCutOff,
-                    constant_left, constant_right, constant_left_length, constant_right_length,
-                    hamming_left_threshold, hamming_right_threshold, usable_left_seq, usable_right_seq, read1, read2):
+def readClustering(barcode_dict, idxBase, barcodeCutOff,constant_left, constant_right, 
+        constant_left_length, constant_right_length,hamming_left_threshold, hamming_right_threshold, 
+        usable_left_seq, usable_right_seq,read1,read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idxBases/ of read 1
@@ -73,9 +72,8 @@ def readClustering(barcode_dict, idxBase, barcodeCutOff,
         return 0
     return 1
 
-def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant_left, constant_right):
-    barcode_dict = defaultdict(list)
-    read_num,discarded_sequence_count = 0,0
+def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant_right, constant_left, barcode_dict):
+    discarded_sequence_count = 0
     discarded_sequence_count = 0
     constant_left_length = len(constant_left)
     constant_right_length = len(constant_right)
@@ -99,7 +97,8 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, cons
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, min_family_member_count,
                barcodeCutOff, constant_left, constant_right, threads):
-    barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant_left, constant_right)
+    barcode_dict = defaultdict(list)
+    barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant_right, constant_left, barcode_dict)
     barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
     p = plotBCdistribution(barcode_member_counts, outputprefix)
     json_file = outputprefix+'.json'
