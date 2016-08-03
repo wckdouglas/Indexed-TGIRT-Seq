@@ -74,7 +74,6 @@ def readClustering(barcode_dict, idxBase, barcodeCutOff,constant_left, constant_
 
 def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant_right, constant_left, barcode_dict):
     discarded_sequence_count = 0
-    discarded_sequence_count = 0
     constant_left_length = len(constant_left)
     constant_right_length = len(constant_right)
     hamming_left_threshold = float(1)/constant_left_length
