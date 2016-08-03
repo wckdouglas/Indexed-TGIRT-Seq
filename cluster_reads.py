@@ -12,7 +12,6 @@ import cjson
 import gzip
 from multiprocessing import Pool, Manager
 from itertools import imap,izip
-import shelve
 from functools import partial
 sns.set_style('white')
 min_q = 33
@@ -30,7 +29,7 @@ def qualToString(posteriors):
     quality = ''.join(map(chr,quality))
     return quality
 
-def qualToStringToInt(q):
+def qualToInt(q):
     return ord(q)-33
 
 def qual2Prob(base_qual):
@@ -55,12 +54,8 @@ def calculateConcensusBase(arg):
     return the maximum likelihood base at the given position,
         along with the mean quality of these concensus bases.
     """
-    seq_list, qual_list, pos = arg
-    no_of_reads = len(seq_list)
-    column_bases = np.empty(no_of_reads,dtype='string')
-    column_qualities = np.zeros(no_of_reads,dtype=np.int8)
-    column_bases = seq_list[:,pos]
-    column_qualities = np.array(map(qualToStringToInt,qual_list[:,pos]))
+    column_bases, column_qualities = arg
+    column_qualities = np.array(map(qualToInt,column_qualities))
     bases = np.unique(column_bases)
     if len(bases) == 1:
         posterior_correct_probability = 1
@@ -82,7 +77,7 @@ def concensusSeq(seq_list, qual_list):
         seq_len = len(seq_list[0])
         seq_list = np.array(map(list,seq_list))
         qual_list = np.array(map(list, qual_list))
-        iter_list = ((seq_list, qual_list, pos) for pos in xrange(seq_len))
+        iter_list = ((seq_list[:,pos], qual_list[:,pos]) for pos in xrange(seq_len))
         concensus_position = map(calculateConcensusBase, iter_list)
         bases, posterior_error_probs = zip(*concensus_position)
         sequence = ''.join(list(bases))

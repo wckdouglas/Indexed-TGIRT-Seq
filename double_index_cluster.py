@@ -73,7 +73,7 @@ def readClustering(barcode_dict, idxBase, barcodeCutOff,constant_left, constant_
     return 1
 
 def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, constant_right, constant_left, barcode_dict):
-    read_num,discarded_sequence_count = 0,0
+    discarded_sequence_count = 0
     discarded_sequence_count = 0
     constant_left_length = len(constant_left)
     constant_right_length = len(constant_right)
@@ -81,16 +81,18 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, cons
     hamming_right_threshold = float(1)/constant_right_length
     usable_left_seq = idxBase + constant_left_length
     usable_right_seq = idxBase + constant_right_length
-    dict_func = partial(readClustering, barcode_dict, idxBase, barcodeCutOff,
-                            constant_left, constant_right, constant_left_length, constant_right_length,
-                            hamming_left_threshold, hamming_right_threshold, usable_left_seq, usable_right_seq)
+    func = partial(readClustering, barcode_dict, idxBase, barcodeCutOff,
+                constant_left, constant_right, constant_left_length, constant_right_length,
+                hamming_left_threshold, hamming_right_threshold, usable_left_seq, usable_right_seq)
+
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
-        for read_num, (read1, read2) in enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2))):
-            discarded_sequence_count += dict_func(read1,read2)             
+        iterator = enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)))
+        for read_num, (read1,read2) in iterator:
+            discarded_sequence_count += func(read1,read2)
     barcode_count = len(barcode_dict.keys())
     stderr.write('[%s] Extracted: %i barcode group\n' %(programname,barcode_count) +\
-                '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\
-                '[%s] Parsed:    %i seqeucnes\n' %(programname, read_num))
+                 '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\
+                 '[%s] Parsed:    %i seqeucnes\n' %(programname, read_num))
     return barcode_dict, read_num, barcode_count
 
 def clustering(outputprefix, inFastq1, inFastq2, idxBase, min_family_member_count,
@@ -136,8 +138,9 @@ def main(args):
     stderr.write( '[%s]     indexed bases:                     %i\n' %(programname,idxBase))
     stderr.write( '[%s]     minimum coverage:                  %i\n' %(programname,min_family_member_count))
     stderr.write( '[%s]     outputPrefix:                      %s\n' %(programname,outputprefix))
-    stderr.write( '[%s]     using constant regions left:   %s\n' %(programname,constant_left))
-    stderr.write( '[%s]     using constant regions right:   %s\n' %(programname,constant_right))
+    stderr.write( '[%s]     using constant regions left:       %s\n' %(programname,constant_left))
+    stderr.write( '[%s]     threads:                           %i\n' %(programname,threads))
+    stderr.write( '[%s]     using constant regions right:      %s\n' %(programname,constant_right))
 
     # divide reads into subclusters
     clustering(outputprefix, inFastq1, inFastq2, idxBase, min_family_member_count, barcodeCutOff, constant_left, constant_right, threads)
