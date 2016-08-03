@@ -89,7 +89,8 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idxBase, barcodeCutOff, cons
 
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         iterator = enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)))
-        discarded_sequence_count = sum(func(read1,read2) for read_num, (read1,read2) in iterator)
+        for read_num, (read1,read2) in iterator:
+            discarded_sequence_count += func(read1,read2)
     barcode_count = len(barcode_dict.keys())
     stderr.write('[%s] Extracted: %i barcode group\n' %(programname,barcode_count) +\
                  '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\
