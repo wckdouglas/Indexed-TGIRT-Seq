@@ -13,6 +13,7 @@ import os
 from itertools import izip
 from multiprocessing import Pool
 from collections import defaultdict
+from functools import partial
 import pyximport
 pyximport.install(setup_args={'include_dirs': np.get_include()})
 from cluster_reads import (dictToJson,
@@ -49,28 +50,29 @@ def getOptions():
     args = parser.parse_args()
     return args
 
-def readClustering(read1, read2, barcode_dict, idx_base, barcode_cut_off, constant, constant_length, hamming_threshold, usable_seq):
+def readClustering(barcode_dict, idx_base, barcode_cut_off, constant,
+                   constant_length, hamming_threshold, usable_seq,
+                   read1, read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
     """
-    idLeft, seqLeft, qualLeft = read1
-    idRight, seqRight, qualRight = read2
-    assert idLeft.split(' ')[0] == idRight.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(idRight, idLeft)
-    barcode = seqLeft[:idx_base]
-    constant_region = seqLeft[idx_base:usable_seq]
-    barcodeQualmean = int(np.mean(map(ord,qualLeft[:idx_base])) - 33)
+    id_left, seq_left, qual_left = read1
+    id_right, seq_right, qual_right = read2
+    assert id_left.split(' ')[0] == id_right.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(id_right, id_left)
+    barcode = seq_right[:idx_base]
+    constant_region = seq_right[idx_base:usable_seq]
+    barcodeQualmean = int(np.mean(map(ord,qual_right[:idx_base])) - 33)
 
     no_N_barcode = 'N' not in barcode
     low_complexity_barcode = any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG'])
     hiQ_barcode = barcodeQualmean > barcode_cut_off
     accurate_constant = hammingDistance(constant, constant_region) <= hamming_threshold
 
-    if no_N_barcode and hiQ_barcode and accurate_constant:
-            #and not low_complexity_barcode:
-        seqLeft = seqLeft[usable_seq:]
-        qualLeft = qualLeft[usable_seq:]
-        barcode_dict[barcode].append([seqLeft,seqRight,qualLeft, qualRight])
+    if (no_N_barcode and hiQ_barcode and accurate_constant and not low_complexity_barcode):
+        seq_right = seq_right[usable_seq:]
+        qual_right = qual_right[usable_seq:]
+        barcode_dict[barcode].append([seq_left,seq_right,qual_left, qual_right])
         return 0
     return 1
 
@@ -79,13 +81,16 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, c
     constant_length = len(constant)
     hamming_threshold = float(1)/constant_length
     usable_seq = idx_base + constant_length
+
+    cluster_reads = partial(readClustering, barcode_dict, idx_base, barcode_cut_off,
+                            constant, constant_length, hamming_threshold, usable_seq)
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         iterator = enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)))
         for read_num, (read1,read2) in iterator:
-            discarded_sequence_count += readClustering(read1,read2,barcode_dict, idx_base, barcode_cut_off,
-                    constant, constant_length, hamming_threshold, usable_seq)
+            discarded_sequence_count += cluster_reads(read1, read2)
             if read_num % 1000000 == 0:
                 stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
+
     barcode_count = len(barcode_dict.keys())
     stderr.write('[%s] Extracted: %i barcode group\n' %(programname,barcode_count) +\
                  '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\

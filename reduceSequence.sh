@@ -4,7 +4,7 @@ PROJECT_PATH=$WORK/Data/NGS/JA16493
 DATA_PATH=$PROJECT_PATH
 RESULT_PATH=$PROJECT_PATH/splitted
 SUFFIX=_R1_001.fastq.gz
-PROGRAM=read_cluster_pairs.py
+PROGRAM=r1_index_cluster.py
 THREADS=12
 mkdir -p  $RESULT_PATH
 
