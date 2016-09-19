@@ -1,6 +1,3 @@
-
-#/usr/bin/env python
-
 from scipy.spatial.distance import hamming
 import numpy as np
 import matplotlib
@@ -13,6 +10,7 @@ import gzip
 from multiprocessing import Pool, Manager
 from itertools import imap,izip
 from functools import partial
+cimport numpy as np
 sns.set_style('white')
 min_q = 33
 max_q = 73
@@ -29,8 +27,13 @@ def qualToString(posteriors):
     quality = ''.join(map(chr,quality))
     return quality
 
-def qualToInt(q):
-    return ord(q)-33
+cpdef np.ndarray qualToInt(np.ndarray qs):
+    cdef:
+        np.ndarray out_qs
+        str q
+
+    out_qs = [ord(q) - 33 for q in qs]
+    return out_qs
 
 def qual2Prob(base_qual):
     '''
@@ -55,7 +58,7 @@ def calculateConcensusBase(arg):
         along with the mean quality of these concensus bases.
     """
     column_bases, column_qualities = arg
-    column_qualities = np.array(map(qualToInt,column_qualities))
+    column_qualities = np.array(qualToInt(column_qualities))
     bases = np.unique(column_bases)
     if len(bases) == 1:
         posterior_correct_probability = 1

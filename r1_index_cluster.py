@@ -12,8 +12,13 @@ import time
 import os
 from itertools import izip
 from multiprocessing import Pool
-from cluster_reads import *
 from collections import defaultdict
+pyximport.install(setup_args={'include_dirs': np.get_include()})
+from cluster_reads import (dictToJson,
+                           writingAndClusteringReads,
+                           plotBCdistribution,
+                           hammingDistance)
+                           
 programname = os.path.basename(sys.argv[0]).split('.')[0]
 
 def getOptions():
@@ -54,10 +59,14 @@ def readClustering(read1, read2, barcode_dict, idx_base, barcode_cut_off, consta
     barcode = seqLeft[:idx_base]
     constant_region = seqLeft[idx_base:usable_seq]
     barcodeQualmean = int(np.mean(map(ord,qualLeft[:idx_base])) - 33)
-    if ('N' not in barcode \
-            and barcodeQualmean > barcode_cut_off \
-            and hammingDistance(constant, constant_region) <= hamming_threshold): #\
-            #and not any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG']):
+
+    no_N_barcode = 'N' not in barcode
+    low_complexity_barcode = any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG'])
+    hiQ_barcode = barcodeQualmean > barcode_cut_off
+    accurate_constant = hammingDistance(constant, constant_region) <= hamming_threshold)
+
+    if ( no_N_barcode and hiQ_barcode and accurate_constant: #\
+            #and not low_complexity_barcode:
         seqLeft = seqLeft[usable_seq:]
         qualLeft = qualLeft[usable_seq:]
         barcode_dict[barcode].append([seqLeft,seqRight,qualLeft, qualRight])
@@ -81,6 +90,7 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, c
                  '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\
                  '[%s] Parsed:    %i seqeucnes\n' %(programname, read_num))
     return barcode_dict, read_num, barcode_count
+
 
 def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant, threads):
     barcode_dict = defaultdict(list)
