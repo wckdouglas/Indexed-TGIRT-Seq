@@ -1,3 +1,4 @@
+
 from scipy.spatial.distance import hamming
 import numpy as np
 import matplotlib
@@ -8,23 +9,25 @@ from sys import stderr
 import cjson
 import gzip
 from multiprocessing import Pool, Manager
-from itertools import imap,izip
+from itertools import imap, izip
 from functools import partial
-cimport numpy as np
 sns.set_style('white')
+
+from numpy cimport ndarray
 
 cdef:
     int min_q = 33
     int max_q = 73
     float max_prob = 0.999999
-    np.ndarray acceptable_bases = np.array(['A','C','T','G'], dtype='string')
+    ndarray acceptable_bases = np.array(['A','C','T','G'], dtype='string')
 
-cpdef str qualToString(np.ndarray posteriors):
+np_ord = np.vectorize(ord)
+
+cpdef str qualToString(ndarray posteriors):
     cdef:
-        np.ndarray quality
+        ndarray quality
         str quality_str
 
-    posteriors = np.array(posteriors, dtype=np.float64)
     posteriors[posteriors > max_prob] = max_prob
     quality =  -10 * np.log10(1 - posteriors)
     quality = np.array(quality,dtype=np.int8) + 33
@@ -34,16 +37,14 @@ cpdef str qualToString(np.ndarray posteriors):
     return quality_str
 
 
-cpdef np.ndarray qualToInt(np.ndarray qs):
+cpdef ndarray qualToInt(ndarray qs):
     cdef:
-        np.ndarray out_qs
-        str q
-
+        ndarray out_np_qs
     out_qs = [ord(q) - 33 for q in qs]
-    return out_qs
+    out_np_qs = np.array(out_qs, dtype='int')
+    return out_np_qs
 
-
-cpdef np.ndarray qual2Prob(np.ndarray base_qual):
+cpdef ndarray qual2Prob(ndarray base_qual):
     '''
     Given a q list,
     return a list of prob
@@ -51,9 +52,10 @@ cpdef np.ndarray qual2Prob(np.ndarray base_qual):
     return np.power(10, np.true_divide(-base_qual,10))
 
 
-cpdef np.ndarray calculatePosterior(np.ndarray column_bases, np.ndarray column_qualities, str guess_base):
+cpdef float calculatePosterior(ndarray column_bases, ndarray column_qualities, guess_base):
     cdef:
-        np.ndarray qual_missed, qual_hit, hit, missed, posterior
+        ndarray qual_missed, qual_hit
+        float prod, missed, posterior
 
     qual_missed = column_qualities[column_bases!=guess_base]
     qual_hit = column_qualities[column_bases==guess_base]
@@ -70,38 +72,36 @@ def calculateConcensusBase(arg):
         along with the mean quality of these concensus bases.
     """
     cdef:
-        np.ndarray column_bases
-        np.ndarray in_column_qualities
-        np.ndarray column_qualities
-        np.ndarray bases, likelihoods, posteriors
-        str concensus_base
+        ndarray column_bases
+        ndarray in_column_qualities
+        ndarray column_qualities
+        ndarray bases, likelihoods, posteriors
         float posterior_correct_probability
         int arg_max_likelihood
 
     column_bases, in_column_qualities = arg
-    column_qualities = np.array(qualToInt(in_column_qualities))
+    column_qualities = qualToInt(in_column_qualities)
     bases = np.unique(column_bases)
     if len(bases) == 1:
         posterior_correct_probability = 1
         concensus_base = bases[0]
     else:
-        posteriors = [calculatePosterior(column_bases, column_qualities, guess_base) for guess_base in bases]
+        posteriors = np.array([calculatePosterior(column_bases, column_qualities, guess_base) for guess_base in bases])
         likelihoods = np.true_divide(posteriors, np.sum(posteriors))
         arg_max_likelihood = np.argmax(likelihoods)
         concensus_base = bases[arg_max_likelihood]
         posterior_correct_probability = likelihoods[arg_max_likelihood]
     return concensus_base, posterior_correct_probability
 
-def concensusSeq(np.ndarray in_seq_list, np.ndarray in_qual_list):
+def concensusSeq(ndarray in_seq_list, ndarray in_qual_list):
     """given a list of sequences, a list of quality and sequence length.
         assertion: all seq in seqlist should have same length (see function: selectSeqLength)
     return a consensus sequence and the mean quality line (see function: calculateConcensusBase)
     """
     cdef:
-        int seq_len
-        np.ndarray seq_list, qual_list
+        int seq_len, pos
+        ndarray seq_list, qual_list
         str sequence, quality
-        np.ndarray bases, posterior_error_probs
 
     if len(in_seq_list) > 1:
         seq_len = len(in_seq_list[0])
@@ -111,10 +111,10 @@ def concensusSeq(np.ndarray in_seq_list, np.ndarray in_qual_list):
         concensus_position = map(calculateConcensusBase, iter_list)
         bases, posterior_error_probs = zip(*concensus_position)
         sequence = ''.join(list(bases))
-        quality = qualToString(posterior_error_probs)
+        quality = qualToString(np.array(posterior_error_probs, dtype=np.float64))
     else:
-        sequence = in_seq_list[0]
-        quality = in_qual_list[0]
+        sequence = str(in_seq_list[0])
+        quality = str(in_qual_list[0])
     return sequence, quality
 
 cpdef float hammingDistance(str expected_constant, str constant_region):
@@ -142,7 +142,7 @@ def plotBCdistribution(barcode_family_count, outputprefix):
     stderr.write('Plotted %s.\n' %figurename)
     return 0
 
-def concensusPairs(np.ndarray table):
+def concensusPairs(ndarray table):
     """ given a pair of reads as defined as the class: seqRecord
     return concensus sequence and mean quality of the pairs,
         as well as the number of reads that supports the concnesus pairs
@@ -150,8 +150,8 @@ def concensusPairs(np.ndarray table):
     """
     #extract table
     cdef:
-        np.ndarray seq_left_list, qual_left_list
-        np.ndarray seq_right_list, qual_right_list
+        ndarray seq_left_list, qual_left_list
+        ndarray seq_right_list, qual_right_list
         str sequence_left, quality_left
         str sequence_right, quality_right
 
@@ -182,7 +182,7 @@ def errorFreeReads(int min_family_member_count, str json_record):
     cdef:
         str index
         int member_count
-        np.ndarray table
+        ndarray table
 
     record = cjson.decode(json_record)
     index = record[0]
@@ -204,7 +204,7 @@ def writeSeqToFiles(read1, read2, result, output_cluster_count):
     else:
         return 0
 
-def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, barcode_count,threads):
+def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, threads):
     # From index library, generate error free reads
     # using multicore to process read clusters
     counter = 0
@@ -215,7 +215,8 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, 
         error_func = partial(errorFreeReads, min_family_member_count)
         write_func = partial(writeSeqToFiles,read1, read2)
         pool = Pool(threads,maxtasksperchild=1000)
-        processes = pool.imap_unordered(error_func, infile, chunksize = 1000)
+        #processes = pool.imap_unordered(error_func, infile, chunksize = 1000)
+        processes = imap(error_func, infile)
         for result in processes:
             output_cluster_count += write_func(result, output_cluster_count)
             counter += 1

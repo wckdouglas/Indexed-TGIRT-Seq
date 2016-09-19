@@ -106,7 +106,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_cou
     json_file = outputprefix+'.json'
     dictToJson(barcode_dict, json_file)
     barcode_dict.clear()
-    output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, json_file, barcode_count, threads)
+    output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, json_file, threads)
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)
     stderr.write('[%s] [Summary]                        \n' %programname)
