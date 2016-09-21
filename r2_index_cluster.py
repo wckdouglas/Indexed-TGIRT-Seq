@@ -1,6 +1,7 @@
 
 #!/bin/env python
 
+from functools import partial
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from sys import stderr
 import numpy as np
@@ -13,7 +14,6 @@ import os
 from itertools import izip
 from multiprocessing import Pool
 from collections import defaultdict
-from functools import partial
 import pyximport
 pyximport.install(setup_args={'include_dirs': np.get_include()})
 from cluster_reads import (dictToJson,
@@ -76,7 +76,9 @@ def readClustering(barcode_dict, idx_base, barcode_cut_off, constant,
         return 0
     return 1
 
-def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, constant, barcode_dict):
+
+def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
+                constant, barcode_dict):
     discarded_sequence_count = 0
     constant_length = len(constant)
     hamming_threshold = float(1)/constant_length
@@ -100,7 +102,8 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, c
 
 def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant, threads):
     barcode_dict = defaultdict(list)
-    barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, constant, barcode_dict)
+    barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base,
+                                                          barcode_cut_off, constant, barcode_dict)
     barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
     p = plotBCdistribution(barcode_member_counts, outputprefix)
     json_file = outputprefix+'.json'

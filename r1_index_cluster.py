@@ -1,6 +1,7 @@
 
 #!/bin/env python
 
+from functools import partial
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from sys import stderr
 import numpy as np
@@ -49,7 +50,8 @@ def getOptions():
     args = parser.parse_args()
     return args
 
-def readClustering(read1, read2, barcode_dict, idx_base, barcode_cut_off, constant, constant_length, hamming_threshold, usable_seq):
+
+def readClustering(barcode_dict, idx_base, barcode_cut_off, constant, constant_length, hamming_threshold, usable_seq, read1, read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
@@ -74,18 +76,24 @@ def readClustering(read1, read2, barcode_dict, idx_base, barcode_cut_off, consta
         return 0
     return 1
 
-def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, constant, barcode_dict):
+
+
+def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
+                constant, barcode_dict):
     discarded_sequence_count = 0
     constant_length = len(constant)
     hamming_threshold = float(1)/constant_length
     usable_seq = idx_base + constant_length
+
+    cluster_reads = partial(readClustering, barcode_dict, idx_base, barcode_cut_off,
+                            constant, constant_length, hamming_threshold, usable_seq)
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
         iterator = enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)))
         for read_num, (read1,read2) in iterator:
-            discarded_sequence_count += readClustering(read1,read2,barcode_dict, idx_base, barcode_cut_off,
-                    constant, constant_length, hamming_threshold, usable_seq)
+            discarded_sequence_count += cluster_reads(read1, read2)
             if read_num % 1000000 == 0:
                 stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
+
     barcode_count = len(barcode_dict.keys())
     stderr.write('[%s] Extracted: %i barcode group\n' %(programname,barcode_count) +\
                  '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\
@@ -95,12 +103,13 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, c
 
 def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant, threads):
     json_file = outputprefix+'.json'
-    #barcode_dict = defaultdict(list)
-    #barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off, constant, barcode_dict)
-    #barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
-    #p = plotBCdistribution(barcode_member_counts, outputprefix)
-    #dictToJson(barcode_dict, json_file)
-    #barcode_dict.clear()
+    barcode_dict = defaultdict(list)
+    barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base,
+                                                        barcode_cut_off, constant, barcode_dict)
+    barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
+    p = plotBCdistribution(barcode_member_counts, outputprefix)
+    dictToJson(barcode_dict, json_file)
+    barcode_dict.clear()
     output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, json_file, threads)
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)

@@ -11,9 +11,8 @@ import gzip
 from multiprocessing import Pool, Manager
 from itertools import imap, izip
 from functools import partial
-sns.set_style('white')
-
 from numpy cimport ndarray
+sns.set_style('white')
 
 cdef:
     int min_q = 33
@@ -21,28 +20,25 @@ cdef:
     float max_prob = 0.999999
     ndarray acceptable_bases = np.array(['A','C','T','G'], dtype='string')
 
-np_ord = np.vectorize(ord)
+np_ord = np.vectorize(ord,otypes=[np.int16])
 
 cpdef str qualToString(ndarray posteriors):
     cdef:
         ndarray quality
         str quality_str
 
-    posteriors[posteriors > max_prob] = max_prob
     quality =  -10 * np.log10(1 - posteriors)
-    quality = np.array(quality,dtype=np.int8) + 33
-    quality[quality<min_q] = min_q
-    quality[quality > max_q] = max_q
+    quality = np.array(quality,dtype=np.int16) + 33
+    quality = np.clip(quality, min_q, max_q)
     quality_str = ''.join(map(chr,quality))
     return quality_str
 
 
 cpdef ndarray qualToInt(ndarray qs):
     cdef:
-        ndarray out_np_qs
-    out_qs = [ord(q) - 33 for q in qs]
-    out_np_qs = np.array(out_qs, dtype='int')
-    return out_np_qs
+        ndarray out_qs
+    out_qs = np_ord(qs) - 33
+    return out_qs
 
 cpdef ndarray qual2Prob(ndarray base_qual):
     '''
@@ -118,8 +114,7 @@ def concensusSeq(ndarray in_seq_list, ndarray in_qual_list):
     return sequence, quality
 
 cpdef float hammingDistance(str expected_constant, str constant_region):
-    cdef float dist
-    dist = hamming(list(expected_constant),list(constant_region))
+    cdef float dist = hamming(list(expected_constant),list(constant_region))
     return dist
 
 def plotBCdistribution(barcode_family_count, outputprefix):
@@ -183,6 +178,9 @@ def errorFreeReads(int min_family_member_count, str json_record):
         str index
         int member_count
         ndarray table
+        str sequence_left, quality_left
+        str sequence_right, quality_right
+        str left_record, right_record
 
     record = cjson.decode(json_record)
     index = record[0]
@@ -196,7 +194,7 @@ def errorFreeReads(int min_family_member_count, str json_record):
     else:
         return 'No'
 
-def writeSeqToFiles(read1, read2, result, output_cluster_count):
+def writeSeqToFiles(read1, read2, output_cluster_count, result):
     if result!='No':
         read1.write('@cluster%i_%s' %(output_cluster_count, result[0]))
         read2.write('@cluster%i_%s' %(output_cluster_count, result[1]))
@@ -207,18 +205,19 @@ def writeSeqToFiles(read1, read2, result, output_cluster_count):
 def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, threads):
     # From index library, generate error free reads
     # using multicore to process read clusters
-    counter = 0
-    output_cluster_count = 0
+    cdef:
+        int counter = 0
+        int output_cluster_count = 0
+
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
     with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2, open(json_file,'r') as infile:
         error_func = partial(errorFreeReads, min_family_member_count)
         write_func = partial(writeSeqToFiles,read1, read2)
         pool = Pool(threads,maxtasksperchild=1000)
-        #processes = pool.imap_unordered(error_func, infile, chunksize = 1000)
-        processes = imap(error_func, infile)
+        processes = pool.imap_unordered(error_func, infile, chunksize = 1000)
         for result in processes:
-            output_cluster_count += write_func(result, output_cluster_count)
+            output_cluster_count += write_func(output_cluster_count, result)
             counter += 1
             if counter % 1000000 == 0:
                 stderr.write('Processed %i read clusters.\n' %(counter))
