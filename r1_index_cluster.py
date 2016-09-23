@@ -47,6 +47,8 @@ def getOptions():
         help="Constant sequence after tags (default: CATCG ,e.g. Douglas's index-R1R)")
     parser.add_argument("-t", "--threads", type=int,default=1,
         help="Threads to use (deflaut: 1)")
+    parser.add_argument("-a", "--mismatch", type=int,default=1,
+        help="Allow how many mismatch in constant region (deflaut: 1)")
     args = parser.parse_args()
     return args
 
@@ -79,10 +81,10 @@ def readClustering(barcode_dict, idx_base, barcode_cut_off, constant, constant_l
 
 
 def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
-                constant, barcode_dict):
+                constant, barcode_dict, allow_mismatch):
     discarded_sequence_count = 0
     constant_length = len(constant)
-    hamming_threshold = float(1)/constant_length
+    hamming_threshold = float(allow_mismatch)/constant_length
     usable_seq = idx_base + constant_length
 
     cluster_reads = partial(readClustering, barcode_dict, idx_base, barcode_cut_off,
@@ -101,7 +103,8 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
     return barcode_dict, read_num, barcode_count
 
 
-def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant, threads):
+def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count,
+               barcode_cut_off, constant, threads, allow_mismatch):
     json_file = outputprefix+'.json'
     barcode_dict = defaultdict(list)
     barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base,
@@ -137,6 +140,7 @@ def main(args):
     barcode_cut_off = args.barcodeCutOff
     constant = args.constant_region
     threads = args.threads
+    allow_mismatch = args.mismatch
 
     #print out parameters
     stderr.write('[%s] [Parameters] \n' %(programname))
@@ -145,9 +149,12 @@ def main(args):
     stderr.write('[%s] outputPrefix:                      %s\n' %(programname,outputprefix))
     stderr.write('[%s] threads:                           %i\n' %(programname,threads))
     stderr.write('[%s] using constant regions:            %s\n' %(programname,constant))
+    stderr.write('[%s] allowed mismatches:                %i\n' %(programname, allow_mismatch))
 
     # divide reads into subclusters
-    clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant, threads)
+    clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count,
+               barcode_cut_off, constant, threads, allow_mismatch)
+
     stderr.write('[%s] time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
 
