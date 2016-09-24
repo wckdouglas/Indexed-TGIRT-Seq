@@ -4,6 +4,9 @@
 from functools import partial
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from sys import stderr
+from itertools import izip
+from multiprocessing import Pool
+from collections import defaultdict
 import numpy as np
 import sys
 import argparse
@@ -11,9 +14,7 @@ import glob
 import gzip
 import time
 import os
-from itertools import izip
-from multiprocessing import Pool
-from collections import defaultdict
+import re
 import pyximport
 pyximport.install(setup_args={'include_dirs': np.get_include()})
 from cluster_reads import (dictToJson,
@@ -53,8 +54,8 @@ def getOptions():
     return args
 
 def readClustering(barcode_dict, idx_base, barcode_cut_off, constant,
-                   constant_length, hamming_threshold, usable_seq,
-                   read1, read2):
+                   constant_length, hamming_threshold, usable_seq, failed_file,
+                   low_complexity_composition, read1, read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
@@ -67,16 +68,18 @@ def readClustering(barcode_dict, idx_base, barcode_cut_off, constant,
     barcodeQualmean = int(np.mean(map(ord,qual_right[:idx_base])) - 33)
 
     no_N_barcode = 'N' not in barcode
-    low_complexity_barcode = any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG'])
+    is_low_complexity_barcode = bool(re.search(low_complexity_composition, barcode))
     hiQ_barcode = barcodeQualmean > barcode_cut_off
     accurate_constant = hammingDistance(constant, constant_region) <= hamming_threshold
 
-    if (no_N_barcode and hiQ_barcode and accurate_constant and not low_complexity_barcode):
+    if (no_N_barcode and hiQ_barcode and accurate_constant): #and not is_low_complexity_barcode):
         seq_right = seq_right[usable_seq:]
         qual_right = qual_right[usable_seq:]
         barcode_dict[barcode].append([seq_left,seq_right,qual_left, qual_right])
         return 0
-    return 1
+    else:
+        failed_file.write('\t'.join([id_left, seq_left, qual_left, seq_right, qual_right]) + '\n')
+        return 1
 
 
 def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
@@ -85,10 +88,15 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
     constant_length = len(constant)
     hamming_threshold = float(allow_mismatch)/constant_length
     usable_seq = idx_base + constant_length
+    mul = 6
+    low_complexity_composition = ['A' * mul,'C' * mul,'T' * mul,'G' * mul]
+    low_complexity_composition = '|'.join(low_complexity_composition)
 
-    cluster_reads = partial(readClustering, barcode_dict, idx_base, barcode_cut_off,
-                            constant, constant_length, hamming_threshold, usable_seq)
-    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
+    failed_reads = outputprefix + '-failed.tsv'
+    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2, open(failed_reads,'w') as failed_file:
+        cluster_reads = partial(readClustering, barcode_dict, idx_base, barcode_cut_off,
+                            constant, constant_length, hamming_threshold, usable_seq,
+                            failed_file, low_complexity_composition)
         iterator = enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)))
         for read_num, (read1,read2) in iterator:
             discarded_sequence_count += cluster_reads(read1, read2)
@@ -102,7 +110,7 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
     return barcode_dict, read_num, barcode_count
 
 
-def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, 
+def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count,
             barcode_cut_off, constant, threads, allow_mismatch):
     barcode_dict = defaultdict(list)
     barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base,

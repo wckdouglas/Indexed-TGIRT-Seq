@@ -27,6 +27,7 @@ cpdef str qualToString(ndarray posteriors):
         ndarray quality
         str quality_str
 
+    posteriors = np.clip(posteriors, 0, max_prob)
     quality =  -10 * np.log10(1 - posteriors)
     quality = np.array(quality,dtype=np.int16) + 33
     quality = np.clip(quality, min_q, max_q)
