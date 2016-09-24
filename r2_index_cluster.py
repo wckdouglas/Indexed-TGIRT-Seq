@@ -100,7 +100,7 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
         iterator = enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)))
         for read_num, (read1,read2) in iterator:
             discarded_sequence_count += cluster_reads(read1, read2)
-            if read_num % 1000000 == 0:
+            if read_num % 10000000 == 0:
                 stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
 
     barcode_count = len(barcode_dict.keys())
@@ -153,6 +153,7 @@ def main(args):
     stderr.write('[%s] [Parameters] \n' %(programname))
     stderr.write('[%s] indexed bases:                     %i\n' %(programname, idx_base))
     stderr.write('[%s] minimum coverage:                  %i\n' %(programname, min_family_member_count))
+    stderr.write('[%s] min mean barcode quality:          %i\n' %(programname, barcode_cut_off))
     stderr.write('[%s] outputPrefix:                      %s\n' %(programname, outputprefix))
     stderr.write('[%s] threads:                           %i\n' %(programname, threads))
     stderr.write('[%s] using constant regions:            %s\n' %(programname, constant))
