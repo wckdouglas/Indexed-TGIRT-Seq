@@ -277,6 +277,45 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, 
 
 
 ############### clustering #####################
+def recordsToDict(str outputprefix, str inFastq1, str inFastq2, int idx_base, int barcode_cut_off,
+                str constant, barcode_dict, int allow_mismatch, str which_side):
+
+    cdef:
+        int discarded_sequence_count = 0
+        int constant_length = len(constant)
+        float hamming_threshold = float(allow_mismatch)/constant_length
+        int usable_seq = idx_base + constant_length
+        int mul = 6
+        str low_complexity_composition
+        str failed_reads
+        int read_num
+
+    low_complexity_base = ['A' * mul,'C' * mul,'T' * mul,'G' * mul]
+    low_complexity_composition = '|'.join(low_complexity_base)
+
+    failed_reads = outputprefix + '-failed.tsv'
+    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2, open(failed_reads,'w') as failed_file:
+
+
+        if which_side == 'read2':
+            cluster_reads = partial(readClusteringR2, barcode_dict, idx_base, barcode_cut_off,
+                            constant, constant_length, hamming_threshold, usable_seq,
+                            failed_file, low_complexity_composition)
+        elif which_side == 'read1':
+            cluster_reads = partial(readClusteringR1, barcode_dict, idx_base, barcode_cut_off,
+                            constant, constant_length, hamming_threshold, usable_seq,
+                            failed_file, low_complexity_composition)
+
+        iterator = enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)))
+        for read_num, (read1,read2) in iterator:
+            discarded_sequence_count += cluster_reads(read1, read2)
+            if read_num % 10000000 == 0:
+                stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
+
+    return barcode_dict, read_num, barcode_count, discarded_sequence_count
+
+
+
 cpdef int readClusteringR2(barcode_dict, int idx_base, int barcode_cut_off, str constant,
                    int constant_length, float hamming_threshold, int usable_seq, failed_file,
                    str low_complexity_composition, read1, read2):

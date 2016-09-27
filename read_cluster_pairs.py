@@ -59,49 +59,18 @@ def getOptions():
     return args
 
 
-def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
-                constant, barcode_dict, allow_mismatch, which_side):
-    discarded_sequence_count = 0
-    constant_length = len(constant)
-    hamming_threshold = float(allow_mismatch)/constant_length
-    usable_seq = idx_base + constant_length
-    mul = 6
-    low_complexity_composition = ['A' * mul,'C' * mul,'T' * mul,'G' * mul]
-    low_complexity_composition = '|'.join(low_complexity_composition)
-
-    failed_reads = outputprefix + '-failed.tsv'
-    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2, open(failed_reads,'w') as failed_file:
-
-
-        if which_side == 'read2':
-            cluster_reads = partial(readClusteringR2, barcode_dict, idx_base, barcode_cut_off,
-                            constant, constant_length, hamming_threshold, usable_seq,
-                            failed_file, low_complexity_composition)
-        elif which_side == 'read1':
-            cluster_reads = partial(readClusteringR1, barcode_dict, idx_base, barcode_cut_off,
-                            constant, constant_length, hamming_threshold, usable_seq,
-                            failed_file, low_complexity_composition)
-
-        iterator = enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)))
-        for read_num, (read1,read2) in iterator:
-            discarded_sequence_count += cluster_reads(read1, read2)
-            if read_num % 10000000 == 0:
-                stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
-
-    barcode_count = len(barcode_dict.keys())
-    stderr.write('[%s] Extracted: %i barcode group\n' %(programname,barcode_count) +\
-                 '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\
-                 '[%s] Parsed:    %i seqeucnes\n' %(programname, read_num))
-    return barcode_dict, read_num, barcode_count
-
-
 def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count,
             barcode_cut_off, constant, threads, allow_mismatch, which_side):
     json_file = outputprefix+'.json'
     barcode_dict = defaultdict(list)
-    barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base,
+    result = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base,
                                                           barcode_cut_off, constant, barcode_dict, allow_mismatch,
                                                             which_side)
+    barcode_dict, read_num, barcode_count, discarded_sequence_count = result
+    stderr.write('[%s] Extracted: %i barcode group\n' %(programname,barcode_count) +\
+                 '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\
+                 '[%s] Parsed:    %i seqeucnes\n' %(programname, read_num))
+
     barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
     p = plotBCdistribution(barcode_member_counts, outputprefix)
     dictToJson(barcode_dict, json_file)
