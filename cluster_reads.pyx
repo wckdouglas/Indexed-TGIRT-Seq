@@ -1,5 +1,6 @@
 
 
+
 from scipy.spatial.distance import hamming
 import numpy as np
 import matplotlib
@@ -9,11 +10,12 @@ import seaborn as sns
 from sys import stderr
 import cjson
 import gzip
+import re
 from multiprocessing import Pool, Manager
 from itertools import imap, izip
 from functools import partial
 from numpy cimport ndarray
-import re
+from cpython cimport bool
 sns.set_style('white')
 
 cdef:
@@ -275,13 +277,21 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, 
 
 
 ############### clustering #####################
-def readClusteringR2(barcode_dict, idx_base, barcode_cut_off, constant,
-                   constant_length, hamming_threshold, usable_seq, failed_file,
-                   low_complexity_composition, read1, read2):
+cpdef int readClusteringR2(barcode_dict, int idx_base, int barcode_cut_off, str constant,
+                   int constant_length, float hamming_threshold, int usable_seq, failed_file,
+                   str low_complexity_composition, read1, read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
     """
+    cdef:
+        str id_left, seq_left, qual_left
+        str id_right, seq_right, qual_right
+        str barcode, constant_region
+        int barcodeQualmean
+        bool no_N_barcode, is_low_complexity_barcode, hiQ_barcode, accurate_constant
+
+
     id_left, seq_left, qual_left = read1
     id_right, seq_right, qual_right = read2
     assert id_left.split(' ')[0] == id_right.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(id_right, id_left)
@@ -303,13 +313,21 @@ def readClusteringR2(barcode_dict, idx_base, barcode_cut_off, constant,
         failed_file.write('\t'.join([id_left, seq_left, qual_left, seq_right, qual_right]) + '\n')
         return 1
 
-def readClusteringR1(barcode_dict, idx_base, barcode_cut_off, constant,
+cpdef int readClusteringR1(barcode_dict, idx_base, barcode_cut_off, constant,
                      constant_length, hamming_threshold, usable_seq, failed_file,
                      low_complexity_composition, read1, read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
     """
+    cdef:
+        str id_left, seq_left, qual_left
+        str id_right, seq_right, qual_right
+        str barcode, constant_region
+        int barcodeQualmean
+        bool no_N_barcode, is_low_complexity_barcode, hiQ_barcode, accurate_constant
+
+
     id_left, seq_left, qual_left = read1
     id_right, seq_right, qual_right = read2
     assert id_left.split(' ')[0] == id_right.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(id_right, id_left)

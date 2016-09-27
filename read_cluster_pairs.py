@@ -21,6 +21,8 @@ pyximport.install(setup_args={'include_dirs': np.get_include()})
 from cluster_reads import (dictToJson,
                            writingAndClusteringReads,
                            plotBCdistribution,
+                           readClusteringR1,
+                           readClusteringR2,
                            hammingDistance)
 
 programname = os.path.basename(sys.argv[0]).split('.')[0]
@@ -57,7 +59,6 @@ def getOptions():
     return args
 
 
-
 def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
                 constant, barcode_dict, allow_mismatch, which_side):
     discarded_sequence_count = 0
@@ -68,18 +69,19 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
     low_complexity_composition = ['A' * mul,'C' * mul,'T' * mul,'G' * mul]
     low_complexity_composition = '|'.join(low_complexity_composition)
 
-    if which_side == 'read2':
-        cluster_reads = partial(readClusteringR2, barcode_dict, idx_base, barcode_cut_off,
-                            constant, constant_length, hamming_threshold, usable_seq,
-                            failed_file, low_complexity_composition)
-    elif which_side == 'read1':
-        cluster_reads = partial(readClusteringR1, barcode_dict, idx_base, barcode_cut_off,
-                            constant, constant_length, hamming_threshold, usable_seq,
-                            failed_file, low_complexity_composition)
-
-
     failed_reads = outputprefix + '-failed.tsv'
     with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2, open(failed_reads,'w') as failed_file:
+
+
+        if which_side == 'read2':
+            cluster_reads = partial(readClusteringR2, barcode_dict, idx_base, barcode_cut_off,
+                            constant, constant_length, hamming_threshold, usable_seq,
+                            failed_file, low_complexity_composition)
+        elif which_side == 'read1':
+            cluster_reads = partial(readClusteringR1, barcode_dict, idx_base, barcode_cut_off,
+                            constant, constant_length, hamming_threshold, usable_seq,
+                            failed_file, low_complexity_composition)
+
         iterator = enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)))
         for read_num, (read1,read2) in iterator:
             discarded_sequence_count += cluster_reads(read1, read2)
