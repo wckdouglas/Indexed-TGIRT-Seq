@@ -90,6 +90,50 @@ def calculateConcensusBase(arg):
         posterior_correct_probability = likelihoods[arg_max_likelihood]
     return concensus_base, posterior_correct_probability
 
+def voteConcensusBase(arg):
+    """Given a list of sequences,
+        a list of quality line and
+        a position,
+    return the maximum likelihood base at the given position,
+        along with the mean quality of these concensus bases.
+    """
+    cdef:
+        ndarray column_bases
+        ndarray column_qualities
+        ndarray in_column_qualities
+        int depth
+        ndarray bases, counts, probs
+        float prob
+
+    column_bases, in_column_qualities = arg
+    column_qualities = qualToInt(in_column_qualities)
+    depth = len(column_bases)
+    bases, counts = np.unique(column_bases, return_counts = True)
+    if np.true_divide(max(counts),np.sum(counts)) > 0.66:
+        base = bases[np.argmax(counts)]
+        if len(bases) == 1:
+            prob = 1 - np.prod(qual2Prob(column_qualities))
+        else:
+            posteriors = np.array([calculatePosterior(column_bases, column_qualities, guess_base) for guess_base in bases])
+            likelihoods = np.true_divide(posteriors, np.sum(posteriors))
+            prob = likelihoods[bases == base]
+        #sum_qual = np.sum(column_qualities[column_bases == base])
+        #prob = 1 - qual2Prob(np.array([sum_qual]))[0]
+    else:
+        base = 'N'
+        prob = 1
+    return base, prob
+
+def concensusSeq(ndarray in_seq_list, ndarray in_qual_list):
+    """given a list of sequences, a list of quality and sequence length.
+        assertion: all seq in seqlist should have same length (see function: selectSeqLength)
+    return a consensus sequence and the mean quality line (see function: calculateConcensusBase)
+    """
+    cdef:
+        int seq_len, pos
+        ndarray seq_list, qual_list
+        str sequence, quality
+
 def concensusSeq(ndarray in_seq_list, ndarray in_qual_list):
     """given a list of sequences, a list of quality and sequence length.
         assertion: all seq in seqlist should have same length (see function: selectSeqLength)
@@ -105,7 +149,8 @@ def concensusSeq(ndarray in_seq_list, ndarray in_qual_list):
         seq_list = np.array(map(list, in_seq_list))
         qual_list = np.array(map(list, in_qual_list))
         iter_list = ((seq_list[:,pos], qual_list[:,pos]) for pos in xrange(seq_len))
-        concensus_position = map(calculateConcensusBase, iter_list)
+        #concensus_position = map(calculateConcensusBase, iter_list)
+        concensus_position = map(voteConcensusBase, iter_list)
         bases, posterior_error_probs = zip(*concensus_position)
         sequence = ''.join(list(bases))
         quality = qualToString(np.array(posterior_error_probs, dtype=np.float64))
@@ -217,6 +262,7 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, 
         write_func = partial(writeSeqToFiles,read1, read2)
         pool = Pool(threads,maxtasksperchild=1000)
         processes = pool.imap_unordered(error_func, infile, chunksize = 1000)
+        #processes = imap(error_func, infile)
         for result in processes:
             output_cluster_count += write_func(output_cluster_count, result)
             counter += 1
