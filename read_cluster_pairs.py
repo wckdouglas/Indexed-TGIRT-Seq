@@ -1,9 +1,13 @@
 
+
 #!/bin/env python
 
 from functools import partial
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from sys import stderr
+from itertools import izip
+from multiprocessing import Pool
+from collections import defaultdict
 import numpy as np
 import sys
 import argparse
@@ -11,9 +15,7 @@ import glob
 import gzip
 import time
 import os
-from itertools import izip
-from multiprocessing import Pool
-from collections import defaultdict
+import re
 import pyximport
 pyximport.install(setup_args={'include_dirs': np.get_include()})
 from cluster_reads import (dictToJson,
@@ -49,51 +51,39 @@ def getOptions():
         help="Threads to use (deflaut: 1)")
     parser.add_argument("-a", "--mismatch", type=int,default=1,
         help="Allow how many mismatch in constant region (deflaut: 1)")
+    parser.add_argument("-r", "--read", required=True, choices = ['read1','read2'],
+        help="barcode on first N bases of which read from pair end")
     args = parser.parse_args()
     return args
 
 
-def readClustering(barcode_dict, idx_base, barcode_cut_off, constant, constant_length, hamming_threshold, usable_seq, read1, read2):
-    """
-    generate read cluster with a dictionary object and seqRecord class.
-    index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
-    """
-    idLeft, seqLeft, qualLeft = read1
-    idRight, seqRight, qualRight = read2
-    assert idLeft.split(' ')[0] == idRight.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(idRight, idLeft)
-    barcode = seqLeft[:idx_base]
-    constant_region = seqLeft[idx_base:usable_seq]
-    barcodeQualmean = int(np.mean(map(ord,qualLeft[:idx_base])) - 33)
-
-    no_N_barcode = 'N' not in barcode
-    low_complexity_barcode = any(pattern in barcode for pattern in ['AAAAA','CCCCC','TTTTT','GGGGG'])
-    hiQ_barcode = barcodeQualmean > barcode_cut_off
-    accurate_constant = hammingDistance(constant, constant_region) <= hamming_threshold
-
-    if no_N_barcode and hiQ_barcode and accurate_constant:
-            #and not low_complexity_barcode:
-        seqLeft = seqLeft[usable_seq:]
-        qualLeft = qualLeft[usable_seq:]
-        barcode_dict[barcode].append([seqLeft,seqRight,qualLeft, qualRight])
-        return 0
-    return 1
-
-
 
 def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
-                constant, barcode_dict, allow_mismatch):
+                constant, barcode_dict, allow_mismatch, which_side):
     discarded_sequence_count = 0
     constant_length = len(constant)
     hamming_threshold = float(allow_mismatch)/constant_length
     usable_seq = idx_base + constant_length
+    mul = 6
+    low_complexity_composition = ['A' * mul,'C' * mul,'T' * mul,'G' * mul]
+    low_complexity_composition = '|'.join(low_complexity_composition)
 
-    cluster_reads = partial(readClustering, barcode_dict, idx_base, barcode_cut_off,
-                            constant, constant_length, hamming_threshold, usable_seq)
-    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2:
+    if which_side == 'read2':
+        cluster_reads = partial(readClusteringR2, barcode_dict, idx_base, barcode_cut_off,
+                            constant, constant_length, hamming_threshold, usable_seq,
+                            failed_file, low_complexity_composition)
+    elif which_side == 'read1':
+        cluster_reads = partial(readClusteringR1, barcode_dict, idx_base, barcode_cut_off,
+                            constant, constant_length, hamming_threshold, usable_seq,
+                            failed_file, low_complexity_composition)
+
+
+    failed_reads = outputprefix + '-failed.tsv'
+    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2, open(failed_reads,'w') as failed_file:
         iterator = enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)))
         for read_num, (read1,read2) in iterator:
             discarded_sequence_count += cluster_reads(read1, read2)
-            if read_num % 1000000 == 0:
+            if read_num % 10000000 == 0:
                 stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
 
     barcode_count = len(barcode_dict.keys())
@@ -104,11 +94,12 @@ def recordsToDict(outputprefix, inFastq1, inFastq2, idx_base, barcode_cut_off,
 
 
 def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count,
-               barcode_cut_off, constant, threads, allow_mismatch):
+            barcode_cut_off, constant, threads, allow_mismatch, which_side):
     json_file = outputprefix+'.json'
     barcode_dict = defaultdict(list)
     barcode_dict, read_num, barcode_count = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base,
-                                                        barcode_cut_off, constant, barcode_dict)
+                                                          barcode_cut_off, constant, barcode_dict, allow_mismatch,
+                                                            which_side)
     barcode_member_counts = map(lambda index: len(barcode_dict[index]), barcode_dict.keys())
     p = plotBCdistribution(barcode_member_counts, outputprefix)
     dictToJson(barcode_dict, json_file)
@@ -141,20 +132,20 @@ def main(args):
     constant = args.constant_region
     threads = args.threads
     allow_mismatch = args.mismatch
+    which_side = args.read
 
     #print out parameters
     stderr.write('[%s] [Parameters] \n' %(programname))
-    stderr.write('[%s] indexed bases:                     %i\n' %(programname,idx_base))
-    stderr.write('[%s] minimum coverage:                  %i\n' %(programname,min_family_member_count))
-    stderr.write('[%s] outputPrefix:                      %s\n' %(programname,outputprefix))
-    stderr.write('[%s] threads:                           %i\n' %(programname,threads))
-    stderr.write('[%s] using constant regions:            %s\n' %(programname,constant))
+    stderr.write('[%s] indexed bases:                     %i\n' %(programname, idx_base))
+    stderr.write('[%s] minimum coverage:                  %i\n' %(programname, min_family_member_count))
+    stderr.write('[%s] min mean barcode quality:          %i\n' %(programname, barcode_cut_off))
+    stderr.write('[%s] outputPrefix:                      %s\n' %(programname, outputprefix))
+    stderr.write('[%s] threads:                           %i\n' %(programname, threads))
+    stderr.write('[%s] using constant regions:            %s\n' %(programname, constant))
     stderr.write('[%s] allowed mismatches:                %i\n' %(programname, allow_mismatch))
 
     # divide reads into subclusters
-    clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count,
-               barcode_cut_off, constant, threads, allow_mismatch)
-
+    clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant, threads, allow_mismatch, which_side)
     stderr.write('[%s] time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
 

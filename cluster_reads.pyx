@@ -1,4 +1,5 @@
 
+
 from scipy.spatial.distance import hamming
 import numpy as np
 import matplotlib
@@ -12,6 +13,7 @@ from multiprocessing import Pool, Manager
 from itertools import imap, izip
 from functools import partial
 from numpy cimport ndarray
+import re
 sns.set_style('white')
 
 cdef:
@@ -98,18 +100,16 @@ def voteConcensusBase(arg):
         along with the mean quality of these concensus bases.
     """
     cdef:
-        ndarray column_bases
-        ndarray column_qualities
-        ndarray in_column_qualities
+        ndarray column_bases, column_qualities, in_column_qualities
+        ndarray bases, counts, posteriors
+        float prob, likelihood
         int depth
-        ndarray bases, counts, probs
-        float prob
 
     column_bases, in_column_qualities = arg
-    column_qualities = qualToInt(in_column_qualities)
     depth = len(column_bases)
+    column_qualities = qualToInt(in_column_qualities)
     bases, counts = np.unique(column_bases, return_counts = True)
-    if np.true_divide(max(counts),np.sum(counts)) > 0.66:
+    if np.true_divide(max(counts), depth) > 0.66:
         base = bases[np.argmax(counts)]
         if len(bases) == 1:
             prob = 1 - np.prod(qual2Prob(column_qualities))
@@ -271,3 +271,61 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, 
         pool.close()
         pool.join()
     return output_cluster_count, read1File, read2File
+
+
+
+############### clustering #####################
+def readClusteringR2(barcode_dict, idx_base, barcode_cut_off, constant,
+                   constant_length, hamming_threshold, usable_seq, failed_file,
+                   low_complexity_composition, read1, read2):
+    """
+    generate read cluster with a dictionary object and seqRecord class.
+    index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
+    """
+    id_left, seq_left, qual_left = read1
+    id_right, seq_right, qual_right = read2
+    assert id_left.split(' ')[0] == id_right.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(id_right, id_left)
+    barcode = seq_right[:idx_base]
+    constant_region = seq_right[idx_base:usable_seq]
+    barcodeQualmean = int(np.mean(map(ord,qual_right[:idx_base])) - 33)
+
+    no_N_barcode = 'N' not in barcode
+    is_low_complexity_barcode = bool(re.search(low_complexity_composition, barcode))
+    hiQ_barcode = barcodeQualmean > barcode_cut_off
+    accurate_constant = hammingDistance(constant, constant_region) <= hamming_threshold
+
+    if no_N_barcode and hiQ_barcode and accurate_constant: #and not is_low_complexity_barcode):
+        seq_right = seq_right[usable_seq:]
+        qual_right = qual_right[usable_seq:]
+        barcode_dict[barcode].append([seq_left,seq_right,qual_left, qual_right])
+        return 0
+    else:
+        failed_file.write('\t'.join([id_left, seq_left, qual_left, seq_right, qual_right]) + '\n')
+        return 1
+
+def readClusteringR1(barcode_dict, idx_base, barcode_cut_off, constant,
+                     constant_length, hamming_threshold, usable_seq, failed_file,
+                     low_complexity_composition, read1, read2):
+    """
+    generate read cluster with a dictionary object and seqRecord class.
+    index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
+    """
+    id_left, seq_left, qual_left = read1
+    id_right, seq_right, qual_right = read2
+    assert id_left.split(' ')[0] == id_right.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(id_right, id_left)
+    barcode = seq_left[:idx_base]
+    constant_region = seq_left[idx_base:usable_seq]
+    barcodeQualmean = int(np.mean(map(ord,qual_left[:idx_base])) - 33)
+
+    no_N_barcode = 'N' not in barcode
+    is_low_complexity_barcode = bool(re.search(low_complexity_composition, barcode))
+    hiQ_barcode = barcodeQualmean > barcode_cut_off
+    accurate_constant = hammingDistance(constant, constant_region) <= hamming_threshold
+
+
+    if no_N_barcode and hiQ_barcode and accurate_constant: #and not low_complexity_barcode:
+        seq_left = seq_left[usable_seq:]
+        qual_left = qual_left[usable_seq:]
+        barcode_dict[barcode].append([seq_left, seq_right, qual_left, qual_right])
+        return 0
+    return 1
