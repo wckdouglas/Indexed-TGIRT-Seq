@@ -2,20 +2,14 @@
 
 #!/bin/env python
 
-from functools import partial
-from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from sys import stderr
-from itertools import izip
-from multiprocessing import Pool
 from collections import defaultdict
 import numpy as np
 import sys
 import argparse
 import glob
-import gzip
 import time
 import os
-import re
 import pyximport
 pyximport.install(setup_args={'include_dirs': np.get_include()})
 from cluster_reads import (dictToJson,
@@ -23,7 +17,8 @@ from cluster_reads import (dictToJson,
                            plotBCdistribution,
                            readClusteringR1,
                            readClusteringR2,
-                           hammingDistance)
+                           hammingDistance,
+                           recordsToDict)
 
 programname = os.path.basename(sys.argv[0]).split('.')[0]
 
@@ -65,7 +60,7 @@ def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_cou
     barcode_dict = defaultdict(list)
     result = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base,
                                                           barcode_cut_off, constant, barcode_dict, allow_mismatch,
-                                                            which_side)
+                                                            which_side, programname)
     barcode_dict, read_num, barcode_count, discarded_sequence_count = result
     stderr.write('[%s] Extracted: %i barcode group\n' %(programname,barcode_count) +\
                  '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\

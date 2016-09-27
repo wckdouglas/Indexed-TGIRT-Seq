@@ -1,7 +1,6 @@
 
-
-
 from scipy.spatial.distance import hamming
+from Bio.SeqIO.QualityIO import FastqGeneralIterator
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Must be before importing matplotlib.pyplot or pylab
@@ -278,7 +277,7 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, 
 
 ############### clustering #####################
 def recordsToDict(str outputprefix, str inFastq1, str inFastq2, int idx_base, int barcode_cut_off,
-                str constant, barcode_dict, int allow_mismatch, str which_side):
+                str constant, barcode_dict, int allow_mismatch, str which_side, str programname):
 
     cdef:
         int discarded_sequence_count = 0
@@ -312,6 +311,7 @@ def recordsToDict(str outputprefix, str inFastq1, str inFastq2, int idx_base, in
             if read_num % 10000000 == 0:
                 stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
 
+    barcode_count = len(barcode_dict.keys())
     return barcode_dict, read_num, barcode_count, discarded_sequence_count
 
 
