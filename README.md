@@ -10,7 +10,8 @@ This is the main script for calling the error-reducing program for paired-end se
 ```
 usage: read_cluster_pairs.py [-h] -o OUTPUTPREFIX -1 FASTQ1 -2 FASTQ2
                              [-m CUTOFF] [-x IDXBASE] [-q BARCODECUTOFF]
-                             [-c CONSTANT_REGION] [-t THREADS]
+                             [-c CONSTANT_REGION] [-t THREADS] [-a MISMATCH]
+                             -r {read1,read2}
 
 Clustering fastq reads to fasta reads with the first $idx_base bases as cDNA-
 synthesis barcode. Concensus bases are called only when the fraction of reads
@@ -38,8 +39,25 @@ optional arguments:
                         Douglas's index-R1R)
   -t THREADS, --threads THREADS
                         Threads to use (deflaut: 1)
+  -a MISMATCH, --mismatch MISMATCH
+                        Allow how many mismatch in constant region (deflaut:
+                        1)
+  -r {read1,read2}, --read {read1,read2}
+                        barcode on first N bases of which read from pair end
 ```
+
 
 ### supplementary notes ###
 
 A notes that support the software can be accessed [here](https://htmlpreview.github.io/?https://raw.githubusercontent.com/wckdouglas/indexed-tgirt-seq/master/notes/tagBased-Error.html?token=AGGQnAIgDPPQI30g-7AYkwhIsJMcEs4lks5XpNEKwA%3D%3D)
+
+### Requirement ###
+python =2.7
+cython =>0.24
+scipy =>0.18
+numpy => 1.11
+cjson =>1.0.5
+biopython =>1.68
+matplotlib =>1.5.1
+seaborn =>0.7.1
+

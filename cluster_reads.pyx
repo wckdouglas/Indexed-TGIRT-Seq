@@ -112,14 +112,8 @@ def voteConcensusBase(arg):
     bases, counts = np.unique(column_bases, return_counts = True)
     if np.true_divide(max(counts), depth) > 0.66:
         base = bases[np.argmax(counts)]
-        if len(bases) == 1:
-            prob = 1 - np.prod(qual2Prob(column_qualities))
-        else:
-            posteriors = np.array([calculatePosterior(column_bases, column_qualities, guess_base) for guess_base in bases])
-            likelihoods = np.true_divide(posteriors, np.sum(posteriors))
-            prob = likelihoods[bases == base]
-        #sum_qual = np.sum(column_qualities[column_bases == base])
-        #prob = 1 - qual2Prob(np.array([sum_qual]))[0]
+        sum_qual = np.prod(column_qualities[column_bases == base])
+        prob = 1 - qual2Prob(np.array([sum_qual]))[0]
     else:
         base = 'N'
         prob = 1
