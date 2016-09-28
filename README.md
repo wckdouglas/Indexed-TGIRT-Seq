@@ -52,12 +52,13 @@ optional arguments:
 A notes that support the software can be accessed [here](https://htmlpreview.github.io/?https://raw.githubusercontent.com/wckdouglas/indexed-tgirt-seq/master/notes/tagBased-Error.html?token=AGGQnAIgDPPQI30g-7AYkwhIsJMcEs4lks5XpNEKwA%3D%3D)
 
 ### Requirement ###
-python =2.7
-cython =>0.24
-scipy =>0.18
-numpy => 1.11
-cjson =>1.0.5
-biopython =>1.68
-matplotlib =>1.5.1
-seaborn =>0.7.1
+
+python =2.7    
+cython =>0.24    
+scipy =>0.18    
+numpy => 1.11    
+cjson =>1.0.5    
+biopython =>1.68    
+matplotlib =>1.5.1    
+seaborn =>0.7.1    
 
