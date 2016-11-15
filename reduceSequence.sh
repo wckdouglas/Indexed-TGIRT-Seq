@@ -1,11 +1,12 @@
 #!/bin/bash
 
-PROJECT_PATH=$WORK/Data/NGS/JA16493
-PROJECT_PATH=$WORK/Data/NGS/JA16468/combined
+#PROJECT_PATH=$WORK/Data/NGS/JA16493
+#PROJECT_PATH=$WORK/Data/NGS/JA16468/combined
+PROJECT_PATH=$WORK/Data/NGS/SA16172/JA16594
 DATA_PATH=$PROJECT_PATH
-RESULT_PATH=$PROJECT_PATH/splitted
+RESULT_PATH=$DATA_PATH/splitted
 SUFFIX=_R1_001.fastq.gz
-PROGRAM=r1_index_cluster.py
+PROGRAM=read_cluster_pairs.py
 THREADS=12
 mkdir -p  $RESULT_PATH
 
@@ -14,14 +15,17 @@ do
 	SAMPLE_NAME=$(basename ${FQ1%$SUFFIX})
 	FQ2=${FQ1/R1/R2}
 	echo $(which python)  $PROGRAM \
-		--outputprefix ${RESULT_PATH}/${SAMPLE_NAME}-errorFree-cython \
+		--outputprefix ${RESULT_PATH}/${SAMPLE_NAME}-errorFree-95 \
 	    --fastq1 ${FQ1} \
 		--fastq2 ${FQ2} \
+		--cutoff 0 \
 		--idxBase 13 \
-		--barcodeCutOff 30 \
-	    --cutoff 0 \
+		--barcodeCutOff 4 \
 		--constant_region CATCG \
-		--threads $THREADS
+		--threads $THREADS \
+		--mismatch 1 \
+		--read read1 \
+		\&\> ${RESULT_PATH}/${SAMPLE_NAME}.log
 done
 
 #PROGRAM=double_index_cluster.py

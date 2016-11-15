@@ -41,7 +41,7 @@ def getOptions():
     parser.add_argument("-x", "--idxBase", type=int, default=13,
         help="how many base in 5' end as index? (default: 13)")
     parser.add_argument('-q', '--barcodeCutOff', type=int, default=30,
-        help="Average base calling quality for barcode sequence (default=30)")
+        help="Minimum base calling quality for barcode sequence (default=30)")
     parser.add_argument("-c", "--constant_region", default='CATCG',
         help="Constant sequence after tags (default: CATCG ,e.g. Douglas's index-R1R)")
     parser.add_argument("-t", "--threads", type=int,default=1,
@@ -50,19 +50,21 @@ def getOptions():
         help="Allow how many mismatch in constant region (deflaut: 1)")
     parser.add_argument("-r", "--read", required=True, choices = ['read1','read2'],
         help="barcode on first N bases of which read from pair end")
+    parser.add_argument("-f", "--fraction", default = 0.66, type=float ,
+        help="Fraction of base to call a concensus base")
     args = parser.parse_args()
     return args
 
 
 def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count,
-            barcode_cut_off, constant, threads, allow_mismatch, which_side):
+            barcode_cut_off, constant, threads, allow_mismatch, which_side, fraction_threshold):
     json_file = outputprefix+'.json'
     barcode_dict = defaultdict(list)
     result = recordsToDict(outputprefix, inFastq1, inFastq2, idx_base,
-                                                          barcode_cut_off, constant, barcode_dict, allow_mismatch,
-                                                            which_side, programname)
+                            barcode_cut_off, constant, barcode_dict, allow_mismatch,
+                            which_side, programname)
     barcode_dict, read_num, barcode_count, discarded_sequence_count = result
-    stderr.write('[%s] Extracted: %i barcode group\n' %(programname,barcode_count) +\
+    stderr.write('[%s] Extracted: %i barcode group\n' %(programname,barcode_count + 1) +\
                  '[%s] discarded: %i sequences\n' %(programname, discarded_sequence_count) +\
                  '[%s] Parsed:    %i seqeucnes\n' %(programname, read_num))
 
@@ -70,7 +72,8 @@ def clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_cou
     p = plotBCdistribution(barcode_member_counts, outputprefix)
     dictToJson(barcode_dict, json_file)
     barcode_dict.clear()
-    output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count, json_file, threads)
+    output_cluster_count, read1File, read2File = writingAndClusteringReads(outputprefix, min_family_member_count,
+                                                                           json_file, threads, fraction_threshold)
     # all done!
     stderr.write('[%s] Finished writing error free reads\n' %programname)
     stderr.write('[%s] [Summary]                        \n' %programname)
@@ -99,6 +102,9 @@ def main(args):
     threads = args.threads
     allow_mismatch = args.mismatch
     which_side = args.read
+    fraction_threshold = args.fraction
+    if fraction_threshold >= 1:
+        sys.exit('Fraction cannot > 1')
 
     #print out parameters
     stderr.write('[%s] [Parameters] \n' %(programname))
@@ -109,9 +115,10 @@ def main(args):
     stderr.write('[%s] threads:                           %i\n' %(programname, threads))
     stderr.write('[%s] using constant regions:            %s\n' %(programname, constant))
     stderr.write('[%s] allowed mismatches:                %i\n' %(programname, allow_mismatch))
+    stderr.write('[%s] Fraction to call concnesus:        %.2f\n' %(programname, fraction_threshold))
 
     # divide reads into subclusters
-    clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant, threads, allow_mismatch, which_side)
+    clustering(outputprefix, inFastq1, inFastq2, idx_base, min_family_member_count, barcode_cut_off, constant, threads, allow_mismatch, which_side, fraction_threshold)
     stderr.write('[%s] time lapsed:      %2.3f min\n' %(programname, np.true_divide(time.time()-start,60)))
     return 0
 

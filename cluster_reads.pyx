@@ -1,4 +1,5 @@
 
+
 from scipy.spatial.distance import hamming
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 import numpy as np
@@ -15,83 +16,15 @@ from itertools import imap, izip
 from functools import partial
 from numpy cimport ndarray
 from cpython cimport bool
+import io
 sns.set_style('white')
 
-cdef:
-    int min_q = 33
-    int max_q = 73
-    float max_prob = 0.999999
-    ndarray acceptable_bases = np.array(['A','C','T','G'], dtype='string')
+def gzip_open(filename, read_flag = 'r'):
+    if 'r' in read_flag:
+        return io.BufferedReader(gzip.open(filename, read_flag))
+    elif 'w' in read_flag:
+        return io.BufferedWriter(gzip.open(filename, read_flag))
 
-np_ord = np.vectorize(ord,otypes=[np.int16])
-
-cpdef str qualToString(ndarray posteriors):
-    cdef:
-        ndarray quality
-        str quality_str
-
-    posteriors = np.clip(posteriors, 0, max_prob)
-    quality =  -10 * np.log10(1 - posteriors)
-    quality = np.array(quality,dtype=np.int16) + 33
-    quality = np.clip(quality, min_q, max_q)
-    quality_str = ''.join(map(chr,quality))
-    return quality_str
-
-
-cpdef ndarray qualToInt(ndarray qs):
-    cdef:
-        ndarray out_qs
-    out_qs = np_ord(qs) - 33
-    return out_qs
-
-cpdef ndarray qual2Prob(ndarray base_qual):
-    '''
-    Given a q list,
-    return a list of prob
-    '''
-    return np.power(10, np.true_divide(-base_qual,10))
-
-
-cpdef float calculatePosterior(ndarray column_bases, ndarray column_qualities, guess_base):
-    cdef:
-        ndarray qual_missed, qual_hit
-        float prod, missed, posterior
-
-    qual_missed = column_qualities[column_bases!=guess_base]
-    qual_hit = column_qualities[column_bases==guess_base]
-    hit = np.prod(1- qual2Prob(qual_hit))
-    missed = np.prod(np.true_divide(qual2Prob(qual_missed),3))
-    posterior = missed * hit
-    return posterior
-
-def calculateConcensusBase(arg):
-    """Given a list of sequences,
-        a list of quality line and
-        a position,
-    return the maximum likelihood base at the given position,
-        along with the mean quality of these concensus bases.
-    """
-    cdef:
-        ndarray column_bases
-        ndarray in_column_qualities
-        ndarray column_qualities
-        ndarray bases, likelihoods, posteriors
-        float posterior_correct_probability
-        int arg_max_likelihood
-
-    column_bases, in_column_qualities = arg
-    column_qualities = qualToInt(in_column_qualities)
-    bases = np.unique(column_bases)
-    if len(bases) == 1:
-        posterior_correct_probability = 1
-        concensus_base = bases[0]
-    else:
-        posteriors = np.array([calculatePosterior(column_bases, column_qualities, guess_base) for guess_base in bases])
-        likelihoods = np.true_divide(posteriors, np.sum(posteriors))
-        arg_max_likelihood = np.argmax(likelihoods)
-        concensus_base = bases[arg_max_likelihood]
-        posterior_correct_probability = likelihoods[arg_max_likelihood]
-    return concensus_base, posterior_correct_probability
 
 def voteConcensusBase(arg):
     """Given a list of sequences,
@@ -101,23 +34,23 @@ def voteConcensusBase(arg):
         along with the mean quality of these concensus bases.
     """
     cdef:
-        ndarray column_bases, column_qualities, in_column_qualities
+        ndarray column_bases, column_qualities
         ndarray bases, counts, posteriors
-        float prob, likelihood
         int depth
 
-    column_bases, in_column_qualities = arg
+    column_bases, column_qualities, fraction_threshold = arg
+    column_qualities_number = map(lambda x: ord(x) - 33, column_qualities)
     depth = len(column_bases)
-    column_qualities = qualToInt(in_column_qualities)
     bases, counts = np.unique(column_bases, return_counts = True)
-    if np.true_divide(max(counts), depth) > 0.66:
+    if np.true_divide(max(counts), depth) > fraction_threshold:
         base = bases[np.argmax(counts)]
-        sum_qual = np.prod(column_qualities[column_bases == base])
-        prob = 1 - qual2Prob(np.array([sum_qual]))[0]
+        qual_num = np.sum(column_qualities_number[column_bases == base])
+        qual = 41 if qual_num > 41 else qual_num
+        qual = chr(qual + 33)
     else:
         base = 'N'
-        prob = 1
-    return base, prob
+        qual = '!'
+    return base, qual
 
 def concensusSeq(ndarray in_seq_list, ndarray in_qual_list):
     """given a list of sequences, a list of quality and sequence length.
@@ -129,7 +62,7 @@ def concensusSeq(ndarray in_seq_list, ndarray in_qual_list):
         ndarray seq_list, qual_list
         str sequence, quality
 
-def concensusSeq(ndarray in_seq_list, ndarray in_qual_list):
+def concensusSeq(ndarray in_seq_list, ndarray in_qual_list, float fraction_threshold):
     """given a list of sequences, a list of quality and sequence length.
         assertion: all seq in seqlist should have same length (see function: selectSeqLength)
     return a consensus sequence and the mean quality line (see function: calculateConcensusBase)
@@ -143,12 +76,11 @@ def concensusSeq(ndarray in_seq_list, ndarray in_qual_list):
         seq_len = len(in_seq_list[0])
         seq_list = np.array(map(list, in_seq_list))
         qual_list = np.array(map(list, in_qual_list))
-        iter_list = ((seq_list[:,pos], qual_list[:,pos]) for pos in xrange(seq_len))
-        #concensus_position = map(calculateConcensusBase, iter_list)
-        concensus_position = map(voteConcensusBase, iter_list)
-        bases, posterior_error_probs = zip(*concensus_position)
+        iter_list = ((seq_list[:,pos], qual_list[:,pos], fraction_threshold) for pos in xrange(seq_len))
+        concensus_position = imap(voteConcensusBase, iter_list)
+        bases, quals = zip(*concensus_position)
         sequence = ''.join(list(bases))
-        quality = qualToString(np.array(posterior_error_probs, dtype=np.float64))
+        quality = ''.join(list(quals))
     else:
         sequence = str(in_seq_list[0])
         quality = str(in_qual_list[0])
@@ -178,7 +110,7 @@ def plotBCdistribution(barcode_family_count, outputprefix):
     stderr.write('Plotted %s.\n' %figurename)
     return 0
 
-def concensusPairs(ndarray table):
+def concensusPairs(ndarray table, float fraction_threshold):
     """ given a pair of reads as defined as the class: seqRecord
     return concensus sequence and mean quality of the pairs,
         as well as the number of reads that supports the concnesus pairs
@@ -195,9 +127,9 @@ def concensusPairs(ndarray table):
     seq_right_list, qual_right_list = table[:,1], table[:,3]
 
     # get concensus left reads first
-    sequence_left, quality_left = concensusSeq(seq_left_list, qual_left_list)
+    sequence_left, quality_left = concensusSeq(seq_left_list, qual_left_list, fraction_threshold)
     # get concensus right reads
-    sequence_right, quality_right = concensusSeq(seq_right_list, qual_right_list)
+    sequence_right, quality_right = concensusSeq(seq_right_list, qual_right_list, fraction_threshold)
     return sequence_left, quality_left, sequence_right, quality_right
 
 def dictToJson(barcode_dict, json_file):
@@ -206,7 +138,7 @@ def dictToJson(barcode_dict, json_file):
     stderr.write('written %s' %(json_file) + '\n')
     return 0
 
-def errorFreeReads(int min_family_member_count, str json_record):
+def errorFreeReads(int min_family_member_count, str json_record, float fraction_threshold):
     """
     main function for getting concensus sequences from read clusters.
     return  a pair of concensus reads with a 4-line fastq format
@@ -228,7 +160,7 @@ def errorFreeReads(int min_family_member_count, str json_record):
     table = np.array(record[1])
     member_count = table.shape[0]
     if member_count >= min_family_member_count:
-        sequence_left, quality_left, sequence_right, quality_right = concensusPairs(table)
+        sequence_left, quality_left, sequence_right, quality_right = concensusPairs(table, fraction_threshold)
         left_record = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequence_left, quality_left)
         right_record = '%s_%i_readCluster\n%s\n+\n%s\n' %(index, member_count, sequence_right, quality_right)
         return left_record, right_record
@@ -243,7 +175,8 @@ def writeSeqToFiles(read1, read2, output_cluster_count, result):
     else:
         return 0
 
-def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, threads):
+def writingAndClusteringReads(outputprefix, min_family_member_count, json_file,
+                            threads, fraction_threshold):
     # From index library, generate error free reads
     # using multicore to process read clusters
     cdef:
@@ -252,8 +185,8 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, 
 
     read1File = outputprefix + '_R1_001.fastq.gz'
     read2File = outputprefix + '_R2_001.fastq.gz'
-    with gzip.open(read1File,'wb') as read1, gzip.open(read2File,'wb') as read2, open(json_file,'r') as infile:
-        error_func = partial(errorFreeReads, min_family_member_count)
+    with gzip_open(read1File,'wb') as read1, gzip_open(read2File,'wb') as read2, open(json_file,'r') as infile:
+        error_func = partial(errorFreeReads, min_family_member_count, fraction_threshold)
         write_func = partial(writeSeqToFiles,read1, read2)
         pool = Pool(threads,maxtasksperchild=1000)
         processes = pool.imap_unordered(error_func, infile, chunksize = 1000)
@@ -268,51 +201,12 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, json_file, 
     return output_cluster_count, read1File, read2File
 
 
-
 ############### clustering #####################
-def recordsToDict(str outputprefix, str inFastq1, str inFastq2, int idx_base, int barcode_cut_off,
-                str constant, barcode_dict, int allow_mismatch, str which_side, str programname):
-
-    cdef:
-        int discarded_sequence_count = 0
-        int constant_length = len(constant)
-        float hamming_threshold = float(allow_mismatch)/constant_length
-        int usable_seq = idx_base + constant_length
-        int mul = 6
-        str low_complexity_composition
-        str failed_reads
-        int read_num
-
-    low_complexity_base = ['A' * mul,'C' * mul,'T' * mul,'G' * mul]
-    low_complexity_composition = '|'.join(low_complexity_base)
-
-    failed_reads = outputprefix + '-failed.tsv'
-    with gzip.open(inFastq1,'rb') as fq1, gzip.open(inFastq2,'rb') as fq2, open(failed_reads,'w') as failed_file:
-
-
-        if which_side == 'read2':
-            cluster_reads = partial(readClusteringR2, barcode_dict, idx_base, barcode_cut_off,
-                            constant, constant_length, hamming_threshold, usable_seq,
-                            failed_file, low_complexity_composition)
-        elif which_side == 'read1':
-            cluster_reads = partial(readClusteringR1, barcode_dict, idx_base, barcode_cut_off,
-                            constant, constant_length, hamming_threshold, usable_seq,
-                            failed_file, low_complexity_composition)
-
-        iterator = enumerate(izip(FastqGeneralIterator(fq1),FastqGeneralIterator(fq2)))
-        for read_num, (read1,read2) in iterator:
-            discarded_sequence_count += cluster_reads(read1, read2)
-            if read_num % 10000000 == 0:
-                stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
-
-    barcode_count = len(barcode_dict.keys())
-    return barcode_dict, read_num, barcode_count, discarded_sequence_count
-
 
 
 cpdef int readClusteringR2(barcode_dict, int idx_base, int barcode_cut_off, str constant,
                    int constant_length, float hamming_threshold, int usable_seq, failed_file,
-                   str low_complexity_composition, read1, read2):
+                   str low_complexity_composition, fastqRecord read1, fastqRecord read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
@@ -325,8 +219,8 @@ cpdef int readClusteringR2(barcode_dict, int idx_base, int barcode_cut_off, str 
         bool no_N_barcode, is_low_complexity_barcode, hiQ_barcode, accurate_constant
 
 
-    id_left, seq_left, qual_left = read1
-    id_right, seq_right, qual_right = read2
+    id_left, seq_left, qual_left = read1.record
+    id_right, seq_right, qual_right = read2.record
     assert id_left.split(' ')[0] == id_right.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(id_right, id_left)
     barcode = seq_right[:idx_base]
     constant_region = seq_right[idx_base:usable_seq]
@@ -336,6 +230,9 @@ cpdef int readClusteringR2(barcode_dict, int idx_base, int barcode_cut_off, str 
     is_low_complexity_barcode = bool(re.search(low_complexity_composition, barcode))
     hiQ_barcode = barcodeQualmean > barcode_cut_off
     accurate_constant = hammingDistance(constant, constant_region) <= hamming_threshold
+    min_qual_left = np.min(map(ord, qual_left))
+    min_qual_right = np.min(map(ord, qual_right))
+    qual_pass = np.min([min_qual_left,min_qual_right])  >= 53
 
     if no_N_barcode and hiQ_barcode and accurate_constant: #and not is_low_complexity_barcode):
         seq_right = seq_right[usable_seq:]
@@ -348,7 +245,7 @@ cpdef int readClusteringR2(barcode_dict, int idx_base, int barcode_cut_off, str 
 
 cpdef int readClusteringR1(barcode_dict, idx_base, barcode_cut_off, constant,
                      constant_length, hamming_threshold, usable_seq, failed_file,
-                     low_complexity_composition, read1, read2):
+                     low_complexity_composition, fastqRecord read1, fastqRecord read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
@@ -357,26 +254,130 @@ cpdef int readClusteringR1(barcode_dict, idx_base, barcode_cut_off, constant,
         str id_left, seq_left, qual_left
         str id_right, seq_right, qual_right
         str barcode, constant_region
-        int barcodeQualmean
+        int barcode_qual_min
         bool no_N_barcode, is_low_complexity_barcode, hiQ_barcode, accurate_constant
 
 
-    id_left, seq_left, qual_left = read1
-    id_right, seq_right, qual_right = read2
+    id_left, seq_left, qual_left = read1.record
+    id_right, seq_right, qual_right = read2.record
     assert id_left.split(' ')[0] == id_right.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(id_right, id_left)
     barcode = seq_left[:idx_base]
     constant_region = seq_left[idx_base:usable_seq]
-    barcodeQualmean = int(np.mean(map(ord,qual_left[:idx_base])) - 33)
+    barcode_qual_min = int(np.min(map(ord,qual_left[:idx_base])) - 33)
 
     no_N_barcode = 'N' not in barcode
     is_low_complexity_barcode = bool(re.search(low_complexity_composition, barcode))
-    hiQ_barcode = barcodeQualmean > barcode_cut_off
+    hiQ_barcode = barcode_qual_min >= barcode_cut_off
     accurate_constant = hammingDistance(constant, constant_region) <= hamming_threshold
+    min_qual_left = np.min(map(ord, qual_left))
+    min_qual_right = np.min(map(ord, qual_right))
+    qual_pass = np.min([min_qual_left,min_qual_right])  >= 53
 
 
-    if no_N_barcode and hiQ_barcode and accurate_constant: #and not low_complexity_barcode:
+    if no_N_barcode and hiQ_barcode and accurate_constant and qual_pass: #and not low_complexity_barcode:
         seq_left = seq_left[usable_seq:]
         qual_left = qual_left[usable_seq:]
         barcode_dict[barcode].append([seq_left, seq_right, qual_left, qual_right])
         return 0
     return 1
+
+def recordsToDict(str outputprefix, str inFastq1, str inFastq2, int idx_base, int barcode_cut_off,
+                str constant, barcode_dict, int allow_mismatch, str which_side, str programname):
+
+    cdef:
+        int discarded_sequence_count = 0
+        int constant_length = len(constant)
+        float hamming_threshold = float(allow_mismatch)/constant_length
+        int usable_seq = idx_base + constant_length
+        int mul = 6
+        str low_complexity_composition
+        str failed_reads
+        int read_num
+        fastqRecord read1, read2
+
+    low_complexity_base = ['A' * mul,'C' * mul,'T' * mul,'G' * mul]
+    low_complexity_composition = '|'.join(low_complexity_base)
+
+    failed_reads = outputprefix + '-failed.tsv'
+    with gzip_open(inFastq1,'rb') as fq1, gzip_open(inFastq2,'rb') as fq2, open(failed_reads,'w') as failed_file:
+
+
+        if which_side == 'read2':
+            cluster_reads = partial(readClusteringR2, barcode_dict, idx_base, barcode_cut_off,
+                            constant, constant_length, hamming_threshold, usable_seq,
+                            failed_file, low_complexity_composition)
+        elif which_side == 'read1':
+            cluster_reads = partial(readClusteringR1, barcode_dict, idx_base, barcode_cut_off,
+                            constant, constant_length, hamming_threshold, usable_seq,
+                            failed_file, low_complexity_composition)
+
+        iterator = enumerate(izip(read_fastq(fq1), read_fastq(fq2)))
+        for read_num, (read1,read2) in iterator:
+            discarded_sequence_count += cluster_reads(read1, read2)
+            if read_num % 10000000 == 0:
+                stderr.write('[%s] Parsed: %i sequence\n' %(programname,read_num))
+
+    barcode_count = len(barcode_dict.keys())
+    return barcode_dict, read_num, barcode_count, discarded_sequence_count
+
+
+
+#### read fq
+### and fastq class
+cdef class fastqRecord:
+    cdef:
+        public record
+
+    def __init__(self, str id, str seq, str qual):
+        self.record = (id, seq, qual)
+
+
+def read_fastq(file_fq):
+    """
+    takes a fastq file as input
+    yields idSeq, sequence and score
+    for each fastq entry
+    http://codereview.stackexchange.com/questions/32897/efficient-parsing-of-fastq
+    """
+
+    #initialize the idSeq, sequence, score and index
+    cdef:
+        str idSeq = ''
+        str sequence = ''
+        str score = ''
+        str line
+        fastqRecord fastq_record
+
+    while True:
+
+        line = file_fq.readline()
+
+        #break if we hit the end of the file
+        if not line:
+            break
+
+        if line.startswith('@') and sequence != '':
+
+            fastq_record = fastqRecord(idSeq, sequence, score)
+            yield fastq_record
+
+            #reset to default values
+            sequence = ''
+            score = ''
+            idSeq = line.strip().lstrip('@')
+
+
+        elif idSeq == '':
+            #get our first idSeq
+            idSeq = line.strip()
+            continue
+
+        elif sequence == '':
+            sequence = line.strip()
+        elif score == '' and line != '+\n':
+            score = line.strip()
+#            assert len(score) == len(sequence), 'Wrongly parsed Fastq' +'\n'+ sequence + '\n' + score
+
+    #yield our final idSeq, sequence and score
+    fastq_record = fastqRecord(idSeq, sequence, score)
+    yield fastq_record
