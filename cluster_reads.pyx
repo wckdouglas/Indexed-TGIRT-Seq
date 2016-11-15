@@ -19,6 +19,8 @@ from cpython cimport bool
 import io
 sns.set_style('white')
 
+np_ord = np.vectorize(ord)
+
 def gzip_open(filename, read_flag = 'r'):
     if 'r' in read_flag:
         return io.BufferedReader(gzip.open(filename, read_flag))
@@ -39,12 +41,12 @@ def voteConcensusBase(arg):
         int depth
 
     column_bases, column_qualities, fraction_threshold = arg
-    column_qualities_number = map(lambda x: ord(x) - 33, column_qualities)
+    column_qualities_number = np_ord(column_qualities)-33
     depth = len(column_bases)
     bases, counts = np.unique(column_bases, return_counts = True)
     if np.true_divide(max(counts), depth) > fraction_threshold:
         base = bases[np.argmax(counts)]
-        qual_num = np.sum(column_qualities_number[column_bases == base])
+        qual_num = np.sum(column_qualities_number[column_bases == base[0]])
         qual = 41 if qual_num > 41 else qual_num
         qual = chr(qual + 33)
     else:
@@ -138,7 +140,7 @@ def dictToJson(barcode_dict, json_file):
     stderr.write('written %s' %(json_file) + '\n')
     return 0
 
-def errorFreeReads(int min_family_member_count, str json_record, float fraction_threshold):
+def errorFreeReads(int min_family_member_count, float fraction_threshold, str json_record):
     """
     main function for getting concensus sequences from read clusters.
     return  a pair of concensus reads with a 4-line fastq format
