@@ -208,7 +208,7 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, json_file,
 
 cpdef int readClusteringR2(barcode_dict, int idx_base, int barcode_cut_off, str constant,
                    int constant_length, float hamming_threshold, int usable_seq, failed_file,
-                   str low_complexity_composition, fastqRecord read1, fastqRecord read2):
+                   str low_complexity_composition, read1, read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
@@ -221,8 +221,8 @@ cpdef int readClusteringR2(barcode_dict, int idx_base, int barcode_cut_off, str 
         bool no_N_barcode, is_low_complexity_barcode, hiQ_barcode, accurate_constant
 
 
-    id_left, seq_left, qual_left = read1.record
-    id_right, seq_right, qual_right = read2.record
+    id_left, seq_left, qual_left = read1
+    id_right, seq_right, qual_right = read2
     assert id_left.split(' ')[0] == id_right.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(id_right, id_left)
     barcode = seq_right[:idx_base]
     constant_region = seq_right[idx_base:usable_seq]
@@ -247,7 +247,7 @@ cpdef int readClusteringR2(barcode_dict, int idx_base, int barcode_cut_off, str 
 
 cpdef int readClusteringR1(barcode_dict, idx_base, barcode_cut_off, constant,
                      constant_length, hamming_threshold, usable_seq, failed_file,
-                     low_complexity_composition, fastqRecord read1, fastqRecord read2):
+                     low_complexity_composition, read1, read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
     index of the dictionary is the barcode extracted from first /idx_bases/ of read 1
@@ -260,8 +260,8 @@ cpdef int readClusteringR1(barcode_dict, idx_base, barcode_cut_off, constant,
         bool no_N_barcode, is_low_complexity_barcode, hiQ_barcode, accurate_constant
 
 
-    id_left, seq_left, qual_left = read1.record
-    id_right, seq_right, qual_right = read2.record
+    id_left, seq_left, qual_left = read1
+    id_right, seq_right, qual_right = read2
     assert id_left.split(' ')[0] == id_right.split(' ')[0], 'Wrongly splitted files!! %s\n%s' %(id_right, id_left)
     barcode = seq_left[:idx_base]
     constant_region = seq_left[idx_base:usable_seq]
@@ -295,7 +295,6 @@ def recordsToDict(str outputprefix, str inFastq1, str inFastq2, int idx_base, in
         str low_complexity_composition
         str failed_reads
         int read_num
-        fastqRecord read1, read2
 
     low_complexity_base = ['A' * mul,'C' * mul,'T' * mul,'G' * mul]
     low_complexity_composition = '|'.join(low_complexity_base)
@@ -313,7 +312,7 @@ def recordsToDict(str outputprefix, str inFastq1, str inFastq2, int idx_base, in
                             constant, constant_length, hamming_threshold, usable_seq,
                             failed_file, low_complexity_composition)
 
-        iterator = enumerate(izip(read_fastq(fq1), read_fastq(fq2)))
+        iterator = enumerate(izip(FastqGeneralIterator(fq1), FastqGeneralIterator(fq2)))
         for read_num, (read1,read2) in iterator:
             discarded_sequence_count += cluster_reads(read1, read2)
             if read_num % 10000000 == 0:
