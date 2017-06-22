@@ -15,8 +15,6 @@ pyximport.install(setup_args={'include_dirs': np.get_include()})
 from cluster_reads import (dictToJson,
                            writingAndClusteringReads,
                            plotBCdistribution,
-                           readClusteringR1,
-                           readClusteringR2,
                            hammingDistance,
                            recordsToDict)
 

@@ -268,7 +268,7 @@ cpdef int readClusteringR1(barcode_dict, idx_base, barcode_cut_off, constant,
     barcode_qual_min = int(np.min(map(ord,qual_left[:idx_base])) - 33)
 
     no_N_barcode = 'N' not in barcode
-    is_low_complexity_barcode = bool(re.search(low_complexity_composition, barcode))
+    is_low_complexity_barcode = bool(low_complexity_composition.search(barcode))
     hiQ_barcode = barcode_qual_min >= barcode_cut_off
     accurate_constant = hammingDistance(constant, constant_region) <= hamming_threshold
     min_qual_left = np.min(map(ord, qual_left))
@@ -292,12 +292,11 @@ def recordsToDict(str outputprefix, str inFastq1, str inFastq2, int idx_base, in
         float hamming_threshold = float(allow_mismatch)/constant_length
         int usable_seq = idx_base + constant_length
         int mul = 6
-        str low_complexity_composition
         str failed_reads
         int read_num
 
     low_complexity_base = ['A' * mul,'C' * mul,'T' * mul,'G' * mul]
-    low_complexity_composition = '|'.join(low_complexity_base)
+    low_complexity_composition = re.compile('|'.join(low_complexity_base))
 
     failed_reads = outputprefix + '-failed.tsv'
     with gzip_open(inFastq1,'rb') as fq1, gzip_open(inFastq2,'rb') as fq2, open(failed_reads,'w') as failed_file:
