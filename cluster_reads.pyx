@@ -1,10 +1,9 @@
 
-
 from scipy.spatial.distance import hamming
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')  # Must be before importing matplotlib.pyplot or pylab
+from matplotlib import use as mpl_use
+mpl_use('Agg')  # Must be before importing matplotlib.pyplot or pylab
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sys import stderr
@@ -44,7 +43,7 @@ def voteConcensusBase(arg):
     column_qualities_number = np_ord(column_qualities)-33
     depth = len(column_bases)
     bases, counts = np.unique(column_bases, return_counts = True)
-    if np.true_divide(max(counts), depth) > fraction_threshold:
+    if counts.max()/float(depth) >= fraction_threshold:
         base = bases[np.argmax(counts)]
         qual_num = np.sum(column_qualities_number[column_bases == base[0]])
         qual = 41 if qual_num > 41 else qual_num
