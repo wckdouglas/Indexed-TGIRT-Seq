@@ -5,7 +5,6 @@ import numpy as np
 from matplotlib import use as mpl_use
 mpl_use('Agg')  # Must be before importing matplotlib.pyplot or pylab
 import matplotlib.pyplot as plt
-import seaborn as sns
 from sys import stderr
 import cjson
 import gzip
@@ -16,7 +15,6 @@ from functools import partial
 from numpy cimport ndarray
 from cpython cimport bool
 import io
-sns.set_style('white')
 
 np_ord = np.vectorize(ord)
 
@@ -53,15 +51,6 @@ def voteConcensusBase(arg):
         qual = '!'
     return base, qual
 
-def concensusSeq(ndarray in_seq_list, ndarray in_qual_list):
-    """given a list of sequences, a list of quality and sequence length.
-        assertion: all seq in seqlist should have same length (see function: selectSeqLength)
-    return a consensus sequence and the mean quality line (see function: calculateConcensusBase)
-    """
-    cdef:
-        int seq_len, pos
-        ndarray seq_list, qual_list
-        str sequence, quality
 
 def concensusSeq(ndarray in_seq_list, ndarray in_qual_list, float fraction_threshold):
     """given a list of sequences, a list of quality and sequence length.
@@ -90,6 +79,33 @@ def concensusSeq(ndarray in_seq_list, ndarray in_qual_list, float fraction_thres
 cpdef float hammingDistance(str expected_constant, str constant_region):
     cdef float dist = hamming(list(expected_constant),list(constant_region))
     return dist
+
+
+cpdef int hamming_distance(str expected_constant, str constant_region):
+    '''
+    Calculating hamming distance from two strings
+    usage: hamming_distance(string1, string2)
+    ==============================
+    Parameter:
+    string1
+    string2
+    has to be same length
+    return:
+    edit distance: the edit distance between two string
+    ===============================
+    '''
+
+    cdef:
+        str i, j
+        int hamming = 0
+
+    for i, j in zip(expected_constant, constant_region):
+        if i != j:
+            hamming += 1
+
+    return hamming
+
+
 
 def plotBCdistribution(barcode_family_count, outputprefix):
     #plotting inspection of barcode distribution
@@ -206,7 +222,7 @@ def writingAndClusteringReads(outputprefix, min_family_member_count, json_file,
 
 
 cpdef int readClusteringR2(barcode_dict, int idx_base, int barcode_cut_off, str constant,
-                   int constant_length, float hamming_threshold, int usable_seq, failed_file,
+                   int constant_length, int hamming_threshold, int usable_seq, failed_file,
                    str low_complexity_composition, read1, read2):
     """
     generate read cluster with a dictionary object and seqRecord class.
@@ -230,7 +246,7 @@ cpdef int readClusteringR2(barcode_dict, int idx_base, int barcode_cut_off, str 
     no_N_barcode = 'N' not in barcode
     is_low_complexity_barcode = bool(re.search(low_complexity_composition, barcode))
     hiQ_barcode = barcodeQualmean > barcode_cut_off
-    accurate_constant = hammingDistance(constant, constant_region) <= hamming_threshold
+    accurate_constant = hamming_distance(constant, constant_region) <= hamming_threshold
     min_qual_left = np.min(map(ord, qual_left))
     min_qual_right = np.min(map(ord, qual_right))
     qual_pass = np.min([min_qual_left,min_qual_right])  >= 53
@@ -269,7 +285,7 @@ cpdef int readClusteringR1(barcode_dict, idx_base, barcode_cut_off, constant,
     no_N_barcode = 'N' not in barcode
     is_low_complexity_barcode = bool(low_complexity_composition.search(barcode))
     hiQ_barcode = barcode_qual_min >= barcode_cut_off
-    accurate_constant = hammingDistance(constant, constant_region) <= hamming_threshold
+    accurate_constant = hamming_distance(constant, constant_region) <= hamming_threshold
     min_qual_left = np.min(map(ord, qual_left))
     min_qual_right = np.min(map(ord, qual_right))
     qual_pass = np.min([min_qual_left,min_qual_right])  >= 53
@@ -288,7 +304,6 @@ def recordsToDict(str outputprefix, str inFastq1, str inFastq2, int idx_base, in
     cdef:
         int discarded_sequence_count = 0
         int constant_length = len(constant)
-        float hamming_threshold = float(allow_mismatch)/constant_length
         int usable_seq = idx_base + constant_length
         int mul = 6
         str failed_reads
@@ -303,11 +318,11 @@ def recordsToDict(str outputprefix, str inFastq1, str inFastq2, int idx_base, in
 
         if which_side == 'read2':
             cluster_reads = partial(readClusteringR2, barcode_dict, idx_base, barcode_cut_off,
-                            constant, constant_length, hamming_threshold, usable_seq,
+                            constant, constant_length, allow_mismatch, usable_seq,
                             failed_file, low_complexity_composition)
         elif which_side == 'read1':
             cluster_reads = partial(readClusteringR1, barcode_dict, idx_base, barcode_cut_off,
-                            constant, constant_length, hamming_threshold, usable_seq,
+                            constant, constant_length, allow_mismatch, usable_seq,
                             failed_file, low_complexity_composition)
 
         iterator = enumerate(izip(FastqGeneralIterator(fq1), FastqGeneralIterator(fq2)))
